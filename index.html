@@ -28,7 +28,10 @@ h1{font-family:var(--f-display);font-weight:400;font-size:clamp(26px,4vw,36px);m
 .main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start}
 @media (max-width:820px){.main{grid-template-columns:1fr}}
 .cam{position:relative;border-radius:22px;overflow:hidden;background:var(--navy);aspect-ratio:4/3;max-width:100%;box-shadow:0 6px 0 rgba(19,43,87,.15)}
-.cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
+.cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;transition:transform .25s}
+.opts{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.opts .lab{font-family:var(--f-display);font-size:17px;min-width:44px}
+.chip.sm{padding:7px 14px;font-size:16px}
 .guide{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);aspect-ratio:529/630;border:4px dashed rgba(255,255,255,.7);border-radius:16px;pointer-events:none}
 .count{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-display);font-size:min(34vw,240px);color:var(--paper);text-shadow:0 6px 0 rgba(19,43,87,.5);pointer-events:none}
 .count small{display:block;font-size:.18em;text-align:center;margin-top:-.2em}
@@ -86,6 +89,10 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
         <div class="count" id="count" aria-live="assertive"></div>
         <div class="shotTag" id="shotTag" hidden></div>
         <div class="camMsg" id="camMsg">카메라를 켜는 중이에요…</div>
+      </div>
+      <div class="opts">
+        <div class="row"><span class="lab">필터</span><span class="row" id="filters"></span></div>
+        <div class="row"><span class="lab">배율</span><span class="row" id="zooms"></span></div>
       </div>
       <div class="row" style="margin-top:14px;justify-content:center">
         <button class="btn go" id="start" type="button">사진 찍기</button>
@@ -176,6 +183,7 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
     var vw=video.videoWidth, vh=video.videoHeight;
     var ar=PW/PH, cw, ch;
     if(vw/vh>ar){ch=vh;cw=vh*ar;}else{cw=vw;ch=vw/ar;}
+    cw/=zoom; ch/=zoom;
     var sx=(vw-cw)/2, sy=(vh-ch)/2;
     var c=document.createElement('canvas'); c.width=Math.round(cw); c.height=Math.round(ch);
     var g=c.getContext('2d'); g.translate(c.width,0); g.scale(-1,1);
@@ -217,6 +225,61 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
     say(''); run(empty);
   });
 
+  // ---------- filters & zoom ----------
+  var FILTERS=[
+    {id:'none',name:'원본',ops:[]},
+    {id:'soft',name:'뽀샤시',ops:[['brightness',1.12],['contrast',.9],['saturate',1.1]]},
+    {id:'warm',name:'따뜻하게',ops:[['sepia',.22],['saturate',1.25],['brightness',1.04]]},
+    {id:'cool',name:'시원하게',ops:[['hue-rotate',-12],['saturate',1.05],['brightness',1.04]]},
+    {id:'mono',name:'흑백',ops:[['saturate',0],['contrast',1.15],['brightness',1.03]]},
+    {id:'vint',name:'빈티지',ops:[['sepia',.45],['contrast',1.08],['saturate',.85]]}
+  ];
+  var filter=FILTERS[0], zoom=1, ZOOMS=[1,1.5,2];
+  function cssOf(f){return f.ops.length?f.ops.map(function(o){return o[0]+'('+o[1]+(o[0]==='hue-rotate'?'deg':'')+')'}).join(' '):'none'}
+  function mat(o){
+    var a=o[1];
+    if(o[0]==='saturate') return [.213+.787*a,.715-.715*a,.072-.072*a,.213-.213*a,.715+.285*a,.072-.072*a,.213-.213*a,.715-.715*a,.072+.928*a];
+    if(o[0]==='sepia'){var b=1-a;return [.393+.607*b,.769-.769*b,.189-.189*b,.349-.349*b,.686+.314*b,.168-.168*b,.272-.272*b,.534-.534*b,.131+.869*b];}
+    if(o[0]==='hue-rotate'){var r=a*Math.PI/180,c=Math.cos(r),s=Math.sin(r);
+      return [.213+c*.787-s*.213,.715-c*.715-s*.715,.072-c*.072+s*.928,.213-c*.213+s*.143,.715+c*.285+s*.140,.072-c*.072-s*.283,.213-c*.213-s*.787,.715-c*.715+s*.715,.072+c*.928+s*.072];}
+    return null;
+  }
+  function applyOps(img,ops){
+    var d=img.data;
+    for(var k=0;k<ops.length;k++){
+      var o=ops[k], m=mat(o), a=o[1];
+      for(var p=0;p<d.length;p+=4){
+        var r=d[p],g=d[p+1],b=d[p+2];
+        if(m){var nr=m[0]*r+m[1]*g+m[2]*b,ng=m[3]*r+m[4]*g+m[5]*b,nb=m[6]*r+m[7]*g+m[8]*b;r=nr;g=ng;b=nb;}
+        else if(o[0]==='brightness'){r*=a;g*=a;b*=a;}
+        else if(o[0]==='contrast'){r=(r-127.5)*a+127.5;g=(g-127.5)*a+127.5;b=(b-127.5)*a+127.5;}
+        d[p]=r<0?0:r>255?255:r; d[p+1]=g<0?0:g>255?255:g; d[p+2]=b<0?0:b>255?255:b;
+      }
+    }
+  }
+  function filtered(c){
+    if(!filter.ops.length) return c;
+    c._f=c._f||{};
+    if(c._f[filter.id]) return c._f[filter.id];
+    var o=document.createElement('canvas'); o.width=c.width; o.height=c.height;
+    var g=o.getContext('2d'); g.drawImage(c,0,0);
+    var im=g.getImageData(0,0,o.width,o.height); applyOps(im,filter.ops); g.putImageData(im,0,0);
+    return (c._f[filter.id]=o);
+  }
+  function chipRow(el,items,label,isOn,onPick){
+    items.forEach(function(it,idx){
+      var b=document.createElement('button'); b.type='button'; b.className='chip sm'; b.id=el.id+'-'+idx;
+      b.textContent=label(it); b.setAttribute('aria-pressed',isOn(it)?'true':'false');
+      b.addEventListener('click',function(){el.querySelectorAll('.chip').forEach(function(c){c.setAttribute('aria-pressed','false')});b.setAttribute('aria-pressed','true');onPick(it);});
+      el.appendChild(b);
+    });
+  }
+  function applyPreview(){video.style.filter=cssOf(filter);video.style.transform='scaleX(-1) scale('+zoom+')';}
+  chipRow($('filters'),FILTERS,function(f){return f.name},function(f){return f===filter},function(f){
+    filter=f; applyPreview(); for(var i=0;i<4;i++) paintSlot(i); draw();
+  });
+  chipRow($('zooms'),ZOOMS,function(z){return z+'배'},function(z){return z===zoom},function(z){zoom=z; applyPreview();});
+
   // ---------- slots ----------
   var slotsEl=$('slots'), slotBtns=[];
   for(var i=0;i<4;i++){(function(i){
@@ -228,7 +291,7 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
     var b=slotBtns[i];
     b.className='slot'+(photos[i]?' filled':'');
     b.innerHTML='<span class="num">'+(i+1)+'</span>'+(photos[i]?'':'<span>'+(i+1)+'</span>');
-    if(photos[i]){var im=document.createElement('img');im.src=photos[i].src;im.alt='';b.appendChild(im);}
+    if(photos[i]){var im=document.createElement('img');im.src=photos[i].src;im.alt='';im.style.filter=cssOf(filter);b.appendChild(im);}
   }
   function markNow(n){slotBtns.forEach(function(b,i){b.classList.toggle('now',i===n)})}
   for(i=0;i<4;i++) paintSlot(i);
@@ -269,7 +332,7 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
     for(var i=0;i<4;i++){
       var x0=PAD+(i%2)*(PW+GAP), y0=HEAD+Math.floor(i/2)*(PH+GAP);
       ctx.fillStyle=f.c;rr(x0-10,y0-10,PW+20,PH+20,26);ctx.fill();
-      if(photos[i]) drawCover(photos[i],x0,y0,PW,PH);
+      if(photos[i]) drawCover(filtered(photos[i]),x0,y0,PW,PH);
       else{ctx.fillStyle='rgba(0,0,0,.08)';rr(x0,y0,PW,PH,18);ctx.fill();}
     }
     var gb=HEAD+2*PH+GAP;
