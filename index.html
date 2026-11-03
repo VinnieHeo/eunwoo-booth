@@ -328,6 +328,12 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
     ctx.fillStyle=f.ink;ctx.textAlign='left';ctx.textBaseline='alphabetic';
     ctx.font='44px Jua, sans-serif';ctx.fillText('HAPPY BIRTHDAY',PAD,105);
     ctx.font='112px Jua, sans-serif';ctx.fillText('은우 생일',PAD,225);
+    // with 친구들 — '은우 생일' 오른쪽에 작게 두 줄
+    var tx=PAD+ctx.measureText('은우 생일').width+28, maxw=(ccx-130)-tx;
+    var L1='with 조은우, 은서,', L2='로운, 다영, 은채', wfs=34;
+    ctx.font=wfs+'px "Gowun Dodum", sans-serif';
+    while(wfs>20&&Math.max(ctx.measureText(L1).width,ctx.measureText(L2).width)>maxw){wfs-=1;ctx.font=wfs+'px "Gowun Dodum", sans-serif';}
+    ctx.fillText(L1,tx,225-wfs*1.25); ctx.fillText(L2,tx,225);
     ctx.font='40px "Gowun Dodum", sans-serif';ctx.fillText('여섯 살이 됐어요',PAD,285);
     for(var i=0;i<4;i++){
       var x0=PAD+(i%2)*(PW+GAP), y0=HEAD+Math.floor(i/2)*(PH+GAP);
