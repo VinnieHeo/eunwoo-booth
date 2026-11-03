@@ -32,7 +32,7 @@ h1{font-family:var(--f-display);font-weight:400;font-size:clamp(26px,4vw,36px);m
 .opts{display:flex;flex-direction:column;gap:10px;margin-top:12px}
 .opts .lab{font-family:var(--f-display);font-size:17px;min-width:44px}
 .chip.sm{padding:7px 14px;font-size:16px}
-.guide{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);aspect-ratio:529/630;border:4px dashed rgba(255,255,255,.7);border-radius:16px;pointer-events:none}
+.guide{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);aspect-ratio:529/630;max-width:100%;border:4px dashed rgba(255,255,255,.7);border-radius:16px;pointer-events:none}
 .count{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-display);font-size:min(34vw,240px);color:var(--paper);text-shadow:0 6px 0 rgba(19,43,87,.5);pointer-events:none}
 .count small{display:block;font-size:.18em;text-align:center;margin-top:-.2em}
 .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
@@ -67,6 +67,18 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
 .modal-in img{max-height:64vh;width:auto;max-width:100%;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.25);-webkit-touch-callout:default}
 .modal-in p{margin:0;text-align:center;font-size:15px}
 [hidden]{display:none!important}
+/* 세로 화면: 카메라를 화면 가득, 나머지는 아래로 */
+@media (orientation:portrait){
+  .wrap{max-width:none;min-height:100vh;min-height:100dvh}
+  .main{flex:1;display:flex;flex-direction:column;gap:14px}
+  .camcol{flex:1;display:flex;flex-direction:column;min-height:0}
+  .cam{flex:1;aspect-ratio:auto;min-height:340px}
+  .opts{flex-direction:row;flex-wrap:wrap;gap:10px 22px}
+  .camcol>.row{margin-top:10px!important}
+  .panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 20px;align-items:start}
+  .panel>.sec:first-child{grid-row:span 4}
+  .hint{display:none}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -81,7 +93,7 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
   </header>
 
   <div class="main">
-    <div>
+    <div class="camcol">
       <div class="cam" id="cam">
         <video id="video" playsinline muted autoplay></video>
         <div class="guide" aria-hidden="true"></div>
@@ -321,6 +333,9 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
     var r=rng(1103), cols=[f.a,f.b,f.c];
     for(var n=0;n<70;n++){var x=r()*W,y=r()*H,c=cols[n%3];ctx.save();ctx.translate(x,y);ctx.rotate(r()*Math.PI);ctx.globalAlpha=.85;ctx.fillStyle=c;
       if(n%3===0)ctx.fillRect(-9,-4,18,8);else if(n%3===1){ctx.beginPath();ctx.arc(0,0,6,0,7);ctx.fill();}else star(0,0,9,c);ctx.restore();}
+    // 인쇄 여백: 엽서 위아래 절취선 안쪽으로 내용을 줄여서 그림
+    var SAFE=80, sc=(H-SAFE*2)/H;
+    ctx.save(); ctx.translate((W-W*sc)/2,SAFE); ctx.scale(sc,sc);
     var ccx=W-PAD-120, ccy=185;
     ctx.fillStyle=f.b;ctx.beginPath();ctx.arc(ccx,ccy,115,0,7);ctx.fill();
     ctx.fillStyle=f.c;ctx.font='200px Jua, sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('6',ccx,ccy+16);
@@ -330,10 +345,10 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
     ctx.font='112px Jua, sans-serif';ctx.fillText('은우 생일',PAD,225);
     // with 친구들 — '은우 생일' 오른쪽에 작게 두 줄
     var tx=PAD+ctx.measureText('은우 생일').width+28, maxw=(ccx-130)-tx;
-    var L1='with 조은우, 은서,', L2='로운, 다영, 은채', wfs=34;
+    var L0='with ', L1='with 조은우, 로운,', L2='다영, 은서, 은채', wfs=34;
     ctx.font=wfs+'px "Gowun Dodum", sans-serif';
     while(wfs>20&&Math.max(ctx.measureText(L1).width,ctx.measureText(L2).width)>maxw){wfs-=1;ctx.font=wfs+'px "Gowun Dodum", sans-serif';}
-    ctx.fillText(L1,tx,225-wfs*1.25); ctx.fillText(L2,tx,225);
+    ctx.fillText(L1,tx,225-wfs*1.25); ctx.fillText(L2,tx+ctx.measureText(L0).width,225);
     ctx.font='40px "Gowun Dodum", sans-serif';ctx.fillText('여섯 살이 됐어요',PAD,285);
     for(var i=0;i<4;i++){
       var x0=PAD+(i%2)*(PW+GAP), y0=HEAD+Math.floor(i/2)*(PH+GAP);
@@ -350,6 +365,7 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
     ctx.font='34px "Gowun Dodum", sans-serif';ctx.fillText('허은우 · 2026. 11. 03',W/2,gb+148);
     for(var k=0;k<6;k++){var side=k<3?-1:1,cx=W/2+side*(260+(k%3)*34),cy=gb+112;
       ctx.fillStyle=k%2?f.b:f.c;ctx.fillRect(cx-6,cy,12,34);ctx.fillStyle=f.a;ctx.beginPath();ctx.ellipse(cx,cy-10,6,10,0,0,7);ctx.fill();}
+    ctx.restore();
   }
 
   // ---------- result / save ----------
