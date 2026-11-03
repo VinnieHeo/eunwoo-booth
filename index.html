@@ -28,11 +28,12 @@ h1{font-family:var(--f-display);font-weight:400;font-size:clamp(26px,4vw,36px);m
 .main{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;align-items:start}
 @media (max-width:820px){.main{grid-template-columns:1fr}}
 .cam{position:relative;border-radius:22px;overflow:hidden;background:var(--navy);aspect-ratio:4/3;max-width:100%;box-shadow:0 6px 0 rgba(19,43,87,.15)}
-.cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;transition:transform .25s}
+.stage{position:absolute;inset:0;overflow:hidden}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block;transition:transform .25s}
 .opts{display:flex;flex-direction:column;gap:10px;margin-top:12px}
 .opts .lab{font-family:var(--f-display);font-size:17px;min-width:44px}
 .chip.sm{padding:7px 14px;font-size:16px}
-.guide{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);aspect-ratio:529/630;max-width:100%;border:4px dashed rgba(255,255,255,.7);border-radius:16px;pointer-events:none}
+.guide{position:absolute;top:50%;left:50%;width:60%;height:90%;transform:translate(-50%,-50%);border:4px dashed rgba(255,255,255,.7);border-radius:16px;pointer-events:none}
 .count{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-display);font-size:min(34vw,240px);color:var(--paper);text-shadow:0 6px 0 rgba(19,43,87,.5);pointer-events:none}
 .count small{display:block;font-size:.18em;text-align:center;margin-top:-.2em}
 .flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
@@ -69,10 +70,12 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
 [hidden]{display:none!important}
 /* 세로 화면: 카메라를 화면 가득, 나머지는 아래로 */
 @media (orientation:portrait){
-  .wrap{max-width:none;min-height:100vh;min-height:100dvh}
-  .main{flex:1;display:flex;flex-direction:column;gap:14px}
-  .camcol{flex:1;display:flex;flex-direction:column;min-height:0}
-  .cam{flex:1;aspect-ratio:auto;min-height:340px}
+  .wrap{max-width:none;height:100vh;height:100dvh}
+  .main{flex:1;min-height:0;display:flex;flex-direction:column;gap:14px}
+  .camcol{flex:1;min-height:0;display:flex;flex-direction:column}
+  .cam{flex:1;min-height:240px;aspect-ratio:auto;background:transparent;box-shadow:none;overflow:visible}
+  .stage{inset:auto;top:0;bottom:0;left:50%;transform:translateX(-50%);height:100%;aspect-ratio:529/630;max-width:100%;border-radius:22px;background:var(--navy);box-shadow:0 6px 0 rgba(19,43,87,.15)}
+  .guide{display:none}
   .opts{flex-direction:row;flex-wrap:wrap;gap:10px 22px}
   .camcol>.row{margin-top:10px!important}
   .panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 20px;align-items:start}
@@ -95,7 +98,7 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
   <div class="main">
     <div class="camcol">
       <div class="cam" id="cam">
-        <video id="video" playsinline muted autoplay></video>
+        <div class="stage"><video id="video" playsinline muted autoplay></video></div>
         <div class="guide" aria-hidden="true"></div>
         <div class="flash" id="flash"></div>
         <div class="count" id="count" aria-live="assertive"></div>
@@ -177,6 +180,19 @@ input[type=text]{width:100%;font-family:var(--f-body);font-size:18px;padding:11p
       .catch(function(){camMsg.textContent='카메라를 켜지 못했어요. 카메라 사용을 "허용"으로 바꾸고 새로고침해 주세요.';});
   }
   startCam();
+  // 점선 칸 = 실제로 찍히는 범위 (화면 크기·카메라 방향에 맞춰 계산)
+  var guide=document.querySelector('.guide');
+  function fitGuide(){
+    var vw=video.videoWidth, vh=video.videoHeight, box=video.parentNode;
+    if(!vw||!vh) return;
+    var bw=box.clientWidth, bh=box.clientHeight, sc=Math.max(bw/vw,bh/vh);
+    var ar=PW/PH, cw, ch;
+    if(vw/vh>ar){ch=vh;cw=vh*ar;}else{cw=vw;ch=vw/ar;}
+    guide.style.width=Math.min(cw*sc,bw-4)+'px'; guide.style.height=Math.min(ch*sc,bh-4)+'px';
+  }
+  video.addEventListener('loadedmetadata',fitGuide); video.addEventListener('resize',fitGuide);
+  window.addEventListener('resize',fitGuide); window.addEventListener('orientationchange',function(){setTimeout(fitGuide,400)});
+  setInterval(fitGuide,1500);
 
   // ---------- sound ----------
   var ac=null;
