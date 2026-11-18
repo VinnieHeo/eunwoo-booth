@@ -117,7 +117,7 @@
         <p>비워 두면 '노란 다람쥐'(으)로 나와요</p>
       </div>
     </div>
-    <div class="opts" data-opts style="top:470px"></div>
+    <div class="opts" data-opts="both" style="top:470px"></div>
     <div style="position:absolute;left:0;right:0;top:546px;display:flex;justify-content:center;gap:16px">
       <button class="big white" id="btnBack">뒤로</button>
       <button class="big" id="btnGo">시작!</button>
@@ -142,7 +142,7 @@
       <p style="font-size:22px;color:var(--soft)">비워 두면 '다람쥐 1', '다람쥐 2'…로 나와요. 대진표는 자동으로 섞여요.</p>
     </div>
     <div class="tn" id="tnGrid"></div>
-    <div class="opts" data-opts style="top:478px"></div>
+    <div class="opts" data-opts="time" style="top:478px"></div>
     <div style="position:absolute;left:0;right:0;top:552px;display:flex;justify-content:center;gap:16px">
       <button class="big white" id="btnTnBack">뒤로</button>
       <button class="big" id="btnMakeBracket">대진표 만들기</button>
@@ -160,6 +160,7 @@
     <div style="position:absolute;left:0;right:0;bottom:16px;display:flex;justify-content:center;gap:16px">
       <button class="pill" id="btnBrHome" style="font-size:22px">처음으로</button>
       <button class="big white" id="btnShuffle" style="font-size:28px;padding:8px 36px">다시 섞기</button>
+      <div class="opts" data-opts="tdiff" style="position:static"></div>
       <button class="big" id="btnNextMatch" style="font-size:30px;padding:8px 40px">경기 시작!</button>
     </div>
   </section>
@@ -483,10 +484,10 @@ let mouseX = null;
 function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 
 /* 난이도: v = 떨어지는 속도 배수, e/l = 떨어지는 간격(초, 앞부분/마지막 3분의 1) */
-const DIFF = { low: { v: 1, e: 1.0, l: 0.75, name: '하' }, mid: { v: 1.5, e: 0.8, l: 0.6, name: '중' }, high: { v: 2, e: 0.65, l: 0.5, name: '상' } };
+const DIFF = { low: { v: 0.5, e: 1.0, l: 0.75, name: '하' }, mid: { v: 1, e: 1.0, l: 0.75, name: '중' }, high: { v: 1.5, e: 0.8, l: 0.6, name: '상' } };
 const TIMES = [30, 60, 90];
-const SET = { diff: 'low', time: 60 };
-try { const o = JSON.parse(localStorage.getItem('dotori-set') || '{}'); if (DIFF[o.diff]) SET.diff = o.diff; if (TIMES.includes(o.time)) SET.time = o.time; } catch (e) {}
+const SET = { diff: 'mid', time: 60 };
+try { const o = JSON.parse(localStorage.getItem('dotori-set2') || '{}'); if (DIFF[o.diff]) SET.diff = o.diff; if (TIMES.includes(o.time)) SET.time = o.time; } catch (e) {}
 function setLabel() { return `난이도 ${DIFF[SET.diff].name} · ${SET.time}초`; }
 function renderOpts() {
   document.querySelectorAll('[data-opts]').forEach(box => {
@@ -497,12 +498,15 @@ function renderOpts() {
       for (const [val, txt] of items) {
         const b = document.createElement('button'); b.type = 'button'; b.textContent = txt;
         b.setAttribute('aria-pressed', String(val === cur));
-        b.onclick = () => { on(val); try { localStorage.setItem('dotori-set', JSON.stringify(SET)); } catch (e) {} renderOpts(); };
+        b.onclick = () => { on(val); try { localStorage.setItem('dotori-set2', JSON.stringify(SET)); } catch (e) {} renderOpts(); };
         g.appendChild(b);
       }
       return g;
     };
-    box.appendChild(mk('난이도', [['low', '하'], ['mid', '중'], ['high', '상']], SET.diff, v => SET.diff = v));
+    const kind = box.dataset.opts || 'both';
+    const DI = [['low', '하'], ['mid', '중'], ['high', '상']];
+    if (kind === 'tdiff') { if (T && T.set) box.appendChild(mk('난이도', DI, T.set.diff, v => { T.set.diff = v; SET.diff = v; })); return; }
+    if (kind === 'both') box.appendChild(mk('난이도', DI, SET.diff, v => SET.diff = v));
     box.appendChild(mk('시간', TIMES.map(t => [t, t + '초']), SET.time, v => SET.time = v));
   });
 }
@@ -536,7 +540,7 @@ function newGame() {
   const time = (mode === 'tour' && T && T.set) ? T.set.time : SET.time;
   const diff = (mode === 'tour' && T && T.set) ? T.set.diff : SET.diff;
   G = { battle, players, schedule: makeSchedule(time, diff), diff, time, next: 0, phase: 'count', t0: performance.now(), elapsed: 0, last: performance.now(), endAt: 0,
-        duration: time, barMax: time, ot: 0, extra: rng(Date.now() + 7), label: mode === 'tour' && T && T.cur ? T.cur.label : null };
+        duration: time, barMax: time, ot: 0, extra: rng(Date.now() + 7), label: mode === 'tour' && T && T.cur ? T.cur.label + ' · ' + DIFF[diff].name : null };
 }
 
 function clampX(p, x) { return Math.max(p.f.l + 100 * p.s, Math.min(p.f.r - 155 * p.s, x)); }
@@ -997,7 +1001,9 @@ function showBracket() {
     }
   }
   const champ = T.rounds[T.R][0];
-  $('brTitle').textContent = `${T.n}명 토너먼트 대진표 · ${DIFF[T.set.diff].name} · ${T.set.time}초`;
+  $('brTitle').textContent = `${T.n}명 토너먼트 대진표 · 경기 ${T.set.time}초`;
+  renderOpts();
+  document.querySelector('[data-opts=tdiff]').style.display = champ !== null ? 'none' : '';
   $('btnShuffle').style.display = T.played === 0 ? '' : 'none';
   if (champ !== null) {
     $('brSub').textContent = '모든 경기가 끝났어요!';
