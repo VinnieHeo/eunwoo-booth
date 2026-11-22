@@ -84,7 +84,7 @@
     <div class="grass" style="height:48px"></div>
     <div style="position:absolute;left:0;right:0;top:52px;display:flex;flex-direction:column;align-items:center;gap:4px">
       <h1 style="font-size:66px">산타 굴뚝 넘기</h1>
-      <p style="font-size:26px;color:var(--soft)">점프로 굴뚝을 넘고, 앉아서 눈덩이를 피하고, 만세로 큰 선물을 받아요!</p>
+      <p style="font-size:26px;color:var(--soft)">점프로 굴뚝을 넘고, 앉아서 눈덩이를 피하고, 두 손 들고 점프해서 큰 선물을 받아요!</p>
     </div>
     <div class="modes">
       <button class="mode" id="btnSolo" style="border:5px solid var(--red)"><canvas id="cvSolo" width="624" height="380"></canvas><span class="t">혼자서</span><span class="s">도전하기</span></button>
@@ -428,6 +428,7 @@ const SFX = {
   puff() { const t = audio().currentTime; tone(700, t, 0.22, 'sawtooth', 0.07, 150); },
   warn() { const t = audio().currentTime; tone(1175, t, 0.08, 'square', 0.05); tone(1175, t + 0.14, 0.08, 'square', 0.05); },
   count() { tone(660, audio().currentTime, 0.18, 'square', 0.08); },
+  ready() { const t = audio().currentTime; tone(1568, t, 0.12, 'triangle', 0.14); tone(2093, t + 0.1, 0.22, 'triangle', 0.14); },
   go() { tone(990, audio().currentTime, 0.4, 'square', 0.09); },
   end() { const t = audio().currentTime; tone(880, t, 0.22, 'square', 0.09); tone(880, t + 0.3, 0.35, 'square', 0.09); },
   win() { const t = audio().currentTime; [523, 659, 784, 1047].forEach((f, i) => tone(f, t + i * 0.12, 0.25)); },
@@ -504,7 +505,10 @@ function detect() {
     const hands = lw.visibility > 0.5 && rw.visibility > 0.5 && lw.y * vh < headTop && rw.y * vh < headTop;
     const earD = Math.hypot((lm[7].x - lm[8].x) * vw, (lm[7].y - lm[8].y) * vh);
     const size = Math.max(70, earD * 2.1, shoulderW * vw * 0.75);
-    return { x: bodyX, w: shoulderW, ok, sy: syPx, sw: swPx, hands, face: { x: nose.x * vw, y: nose.y * vh - size * 0.06, size } };
+    // 기준 높이 = 얼굴(코) 높이, 크기 = 어깨너비 (어깨가 안 잡히면 귀 사이 거리로 대신)
+    const faceOk = nose.visibility > 0.5;
+    const sc = ok ? swPx : Math.max(30, earD * 2.2);
+    return { x: bodyX, w: shoulderW, ok, sy: syPx, sw: swPx, ny: nose.y * vh, sc, faceOk, vh, hands, face: { x: nose.x * vw, y: nose.y * vh - size * 0.06, size } };
   });
 }
 function faceDrawer(pl) {
@@ -594,12 +598,13 @@ function newGame() {
   const players = lanes.map((lane, i) => ({
     lane, k, WW: (lane.r - lane.l) / k, idx: i, suit: i === 0 ? 'red' : 'green',
     name: names[i] || (i === 0 ? '빨간 산타' : '초록 산타'),
-    h: 0, vy: 0, sup: false, crouch: false, crouchHold: 0, stunUntil: 0, jumpAt: 0, jumpLatch: false, handsPrev: false, base: null,
+    h: 0, vy: 0, sup: false, crouch: false, crouchHold: 0, stunUntil: 0, jumpAt: 0, jumpLatch: false, handsPrev: false, handsAt: 0, hist: [], lowT: 0, grounded: true, base: null, sc: 0,
+    samples: [], calibDone: false, calibProg: 0, readyAt: 0, lastNy: null, lastSc: 0,
     score: 0, small: 0, big: 0, chimneys: 0, dodged: 0, bumps: 0, objs: [], warns: [], pops: [], faceAt: 0, hasSnap: false, snapAt: 0,
   }));
   const time = (mode === 'tour' && T && T.set) ? T.set.time : SET.time;
   const diff = (mode === 'tour' && T && T.set) ? T.set.diff : SET.diff;
-  G = { battle, players, k, schedule: makeSchedule(1.5, time, diff, rng(Date.now())), diff, time, next: 0, phase: 'count', t0: performance.now(), elapsed: 0, last: performance.now(), endAt: 0,
+  G = { battle, players, k, schedule: makeSchedule(1.5, time, diff, rng(Date.now())), diff, time, next: 0, phase: cam.ready ? 'calib' : 'count', calibAt: performance.now(), t0: performance.now(), elapsed: 0, last: performance.now(), endAt: 0,
         duration: time, barMax: time, ot: 0, dist: 0, extra: rng(Date.now() + 7), label: mode === 'tour' && T && T.cur ? T.cur.label + ' · ' + DIFF[diff].name : null };
 }
 function speedNow() {
@@ -610,12 +615,12 @@ function speedNow() {
 /* 동작 */
 function doJump(p, now) {
   if (G.phase !== 'play' || now < p.stunUntil) return;
-  if (p.h === 0 && p.vy === 0) { p.vy = VJ; p.sup = false; p.jumpAt = now; SFX.jump(); }
+  if (p.grounded) { p.vy = VJ; p.sup = false; p.jumpAt = now; p.grounded = false; p.crouchHold = 0; SFX.jump(); }
 }
 function doSuper(p, now) {
   if (G.phase !== 'play' || now < p.stunUntil) return;
-  if (p.h === 0 && p.vy === 0) { p.vy = VS; p.sup = true; p.jumpAt = now; SFX.sup(); addPop(p, SX, H_STAND + 50, '만세!', '#FFD23F', now); }
-  else if (!p.sup && now - p.jumpAt < 250) { p.vy += VS - VJ; p.sup = true; SFX.sup(); addPop(p, SX, H_STAND + 50, '만세!', '#FFD23F', now); }
+  if (p.grounded) { p.vy = VS; p.sup = true; p.jumpAt = now; p.grounded = false; p.crouchHold = 0; SFX.sup(); addPop(p, SX, H_STAND + 50, '만세!', '#FFD23F', now); }
+  else if (!p.sup && now - p.jumpAt < 300) { p.vy += VS - VJ; p.sup = true; SFX.sup(); addPop(p, SX, H_STAND + 50, '만세!', '#FFD23F', now); }
 }
 function addPop(p, wx, wy, txt, color, now) {
   p.pops.push({ x: p.lane.l + wx * p.k, y: GROUND - wy * p.k, txt, color, at: now });
@@ -636,18 +641,66 @@ function readPoses(dt, now) {
 }
 function applyPose(p, pose, dt, now) {
   p.face = pose.face; p.faceAt = now; p.camAt = now;
-  if (!pose.ok) return;
+  if (!pose.faceOk) return;
+  const ny = pose.ny, sc = pose.sc;
+  p.lastNy = ny; p.lastSc = sc; p.lastX = pose.x; p.vh = pose.vh;
+  if (G.phase === 'calib') {
+    p.samples.push({ t: now, ny, sc });
+    p.samples = p.samples.filter(a => now - a.t <= 1500);
+    return;
+  }
+  if (G.phase !== 'play') return;
   const th = SENS[sensSel.value] || SENS.normal;
-  if (p.base === null || Math.abs(pose.sy - p.base) > pose.sw * 2.5) p.base = pose.sy;
-  const dy = (p.base - pose.sy) / pose.sw;           // + 위로, - 아래로
-  if (pose.hands && !p.handsPrev) doSuper(p, now);
-  else if (!pose.hands && dy > th.j && !p.jumpLatch) { doJump(p, now); p.jumpLatch = true; }
-  if (dy < th.j * 0.5) p.jumpLatch = false;
+  if (p.base === null) { p.base = ny; p.sc = sc; }
+  p.sc += (sc - p.sc) * Math.min(1, dt * 0.5);         // 몸 크기(카메라와의 거리)는 천천히 따라감
+  const dy = (p.base - ny) / p.sc;                     // + 위로, - 아래로 (몸 크기 배수)
+  // 다른 아이로 바뀌는 등 기준에서 아주 멀리 1.5초 넘게 벗어나 있으면 다시 잡기
+  if (Math.abs(dy) > 3) { p.farT = (p.farT || 0) + dt; if (p.farT > 1.5) { p.base = ny; p.sc = sc; p.farT = 0; return; } } else p.farT = 0;
+  // 점프 = 기준보다 올라감, 또는 '숙였다가 쑥 올라옴' (최근 0.45초 안의 가장 낮은 곳에서 크게 올라오고 기준 근처 위로 왔을 때)
+  p.hist.push({ t: now, dy }); p.hist = p.hist.filter(a => now - a.t <= 450);
+  const lowest = Math.min(...p.hist.map(a => a.dy));
+  const rose = dy > th.j || (dy > th.j * 0.5 && dy - lowest > th.j * 1.5);
+  if (pose.hands) p.handsAt = now;
+  const handsUp = pose.hands || now - p.handsAt < 400;           // 손이 잠깐 내려가도 0.4초는 인정
+  if (rose && !p.jumpLatch) { p.jumpLatch = true; p.lowT = 0; handsUp ? doSuper(p, now) : doJump(p, now); }
+  else if (handsUp && p.jumpLatch && !p.sup && now - p.jumpAt < 300) doSuper(p, now); // 점프 직후 손을 들어도 만세
+  if (dy < th.j * 0.25) p.jumpLatch = false;
   p.handsPrev = pose.hands;
-  if (dy < -th.c) p.crouchHold = 0.25;
-  // 똑바로 서 있을 때만 기준 높이를 천천히 맞춤 (카메라에 가까이/멀리 가도 괜찮게)
-  if (Math.abs(dy) < th.j * 0.5 && !pose.hands) p.base += (pose.sy - p.base) * Math.min(1, dt * 1.5);
-  p.pose = pose;
+  // 앉기 = 0.15초 넘게 숙이고 있을 때 (점프하려고 잠깐 숙이는 건 앉기로 안 봄)
+  if (dy < -th.c) { p.lowT += dt; if (p.lowT > 0.15) p.crouchHold = 0.25; } else p.lowT = 0;
+  // 게임 중 기준점은 거의 고정: 똑바로 서 있을 때만 아주 천천히 맞춤
+  if (Math.abs(dy) < th.j * 0.4 && !pose.hands) p.base += (ny - p.base) * Math.min(1, dt * 0.3);
+}
+
+/* 시작 전 기준점 잡기: 얼굴이 1초 동안 거의 안 움직이면 그 평균 높이를 기준으로 */
+const CALIB_HOLD = 900, CALIB_TOL = 0.15, CALIB_MAX = 5;
+function calibRun(p) {
+  const s = p.samples; if (!s.length) return { ms: 0, from: 0 };
+  const last = s[s.length - 1]; let j = s.length - 1;
+  while (j > 0 && Math.abs(s[j - 1].ny - last.ny) < CALIB_TOL * last.sc) j--;
+  return { ms: last.t - s[j].t, from: j };
+}
+function updateCalib(now) {
+  const el = (now - G.calibAt) / 1000;
+  for (const p of G.players) {
+    if (p.calibDone) continue;
+    const run = calibRun(p);
+    p.calibProg = Math.min(1, run.ms / CALIB_HOLD);
+    if (run.ms >= CALIB_HOLD && now - p.faceAt < 300) {
+      const part = p.samples.slice(run.from);
+      p.base = part.reduce((a, b) => a + b.ny, 0) / part.length;
+      p.sc = part.reduce((a, b) => a + b.sc, 0) / part.length;
+      p.calibDone = true; p.readyAt = now; SFX.ready();
+    } else if (el > CALIB_MAX) {
+      // 계속 움직여도 게임이 멈추지 않게: 그 순간 높이로 잡기 (안 보이면 처음 보일 때 잡기)
+      if (p.lastNy != null) { p.base = p.lastNy; p.sc = p.lastSc; }
+      p.calibDone = true; p.readyAt = now; SFX.ready();
+    }
+  }
+  if (G.players.every(p => p.calibDone)) {
+    if (!G.allReadyAt) G.allReadyAt = now;
+    if (now - G.allReadyAt > 800) { G.phase = 'count'; G.t0 = now; G.lastCount = null; }
+  }
 }
 function keyCrouch(p) {
   if (!G.battle) return keys.ArrowDown || keys.KeyS;
@@ -658,7 +711,9 @@ function step(now) {
   const dt = Math.min(0.05, (now - G.last) / 1000); G.last = now;
   detect();
   readPoses(dt, now);
-  if (G.phase === 'count') {
+  if (G.phase === 'calib') {
+    updateCalib(now);
+  } else if (G.phase === 'count') {
     const left = 3 - (now - G.t0) / 1000;
     const n = Math.ceil(left);
     if (n !== G.lastCount && n > 0) { G.lastCount = n; SFX.count(); }
@@ -701,15 +756,30 @@ function spawn(p, ev) {
   else if (ev.k === 'sb') p.objs.push({ k: 'sb', x: X });
 }
 
+/* 굴뚝 위 착지: 내려오다가 굴뚝 윗면(조금 아래까지 봐줌)에 닿으면 그 위에 섬 */
+function supportAt(p, prevH) {
+  let f = 0;
+  if (!G) return 0;
+  for (const o of p.objs) {
+    if (o.k === 'ch' && !o.hit && SX + HALF > o.x + 4 && SX - HALF < o.x + CH_W - 4 && prevH >= o.lv - 8) f = Math.max(f, o.lv);
+  }
+  return f;
+}
 function settle(p, dt) {
-  if (p.h > 0 || p.vy > 0) { p.h += p.vy * dt; p.vy -= GRAV * dt; if (p.h <= 0) { p.h = 0; p.vy = 0; p.sup = false; } }
+  const floor = supportAt(p, p.h);
+  if (p.h > floor || p.vy > 0) { p.h += p.vy * dt; p.vy -= GRAV * dt; }
+  if (p.h <= floor && p.vy <= 0) {
+    if (!p.grounded && floor > 0) p.onChimney = true;
+    p.h = floor; p.vy = 0; p.sup = false; p.grounded = true;
+  } else p.grounded = false;
+  if (floor === 0) p.onChimney = false;
 }
 
 function updatePlayer(p, dt, now, sp) {
   // 키보드 앉기 + 카메라 앉기
   if (p.crouchHold > 0) p.crouchHold -= dt;
   settle(p, dt);
-  p.crouch = p.h === 0 && (p.crouchHold > 0 || !!keyCrouch(p));
+  p.crouch = p.grounded && (p.crouchHold > 0 || !!keyCrouch(p));
   p.warns = p.warns.filter(w => w.until > G.elapsed);
   const top = p.h + (p.crouch ? H_CROUCH : H_STAND);
   const B = { l: SX - HALF, r: SX + HALF, b: p.h, t: top };
@@ -757,7 +827,7 @@ function renderLane(c, p, now, t) {
   const stun = now < p.stunUntil;
   drawSanta(c, SX, -p.h, 1, {
     suit: p.suit, face: faceDrawer(p), crouch: p.crouch, sup: p.sup, t, stun, blink: stun,
-    run: playing && p.h === 0 && !p.crouch ? Math.sin(t * 16) * 3 : 0,
+    run: playing && p.grounded && !p.crouch ? Math.sin(t * 16) * 3 : 0,
   });
   if (p.sup) { for (let i = 1; i <= 4; i++) { c.globalAlpha = 0.6 - i * 0.12; circle(c, SX - i * 14, -p.h - 30 + i * 10, 5, '#F8E9A8'); } c.globalAlpha = 1; }
   for (const o of p.objs) if (o.k === 'sb') drawSnowball(c, o.x, -SB_Y, o);
@@ -794,7 +864,7 @@ function render(now) {
     ctx.restore();
   }
   // 위쪽 점수판
-  const remain = G.phase === 'count' ? G.time : G.duration - G.elapsed;
+  const remain = (G.phase === 'count' || G.phase === 'calib') ? G.time : G.duration - G.elapsed;
   if (G.battle) {
     drawScore(ctx, G.players[0].score, 40, 18, false, RED, G.players[0].name, 'red');
     drawScore(ctx, G.players[1].score, W - 40, 18, true, GRN, G.players[1].name, 'green');
@@ -810,7 +880,24 @@ function render(now) {
     drawScore(ctx, G.players[0].score, W - 40, 18, true, '#1F2A4A');
   }
   drawPreview();
-  if (G.phase === 'count') {
+  if (G.phase === 'calib') {
+    ctx.fillStyle = 'rgba(20,28,51,0.35)'; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.lineWidth = 10; ctx.strokeStyle = '#1F2A4A'; ctx.font = '64px Jua, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeText('가만히 서 있어요!', W / 2, 220); ctx.fillStyle = '#FFFFFF'; ctx.fillText('가만히 서 있어요!', W / 2, 220); ctx.restore();
+    text(ctx, '얼굴 높이로 기준점을 잡고 있어요', W / 2, 290, 30, '#F8E9A8', 'center');
+    for (const p of G.players) {
+      const cx = Math.max(p.lane.l + 130, p.lane.l + SX * p.k), cy = GROUND - 175 * p.k;
+      const seen = now - p.faceAt < 500;
+      const msg = p.calibDone ? '준비 완료!' : seen ? '가만히…' : '카메라 앞에 서 주세요';
+      ctx.font = '28px Jua, sans-serif'; const w = Math.max(200, ctx.measureText(msg).width + 48);
+      pill(ctx, cx - w / 2, cy - 44, w, 72, p.calibDone ? '#2E8B57' : '#1F2A4A', 4);
+      text(ctx, msg, cx, cy - 20, 28, p.calibDone ? '#2E8B57' : '#1F2A4A', 'center');
+      const bw = w - 48;
+      ctx.beginPath(); ctx.roundRect(cx - bw / 2, cy + 4, bw, 12, 6); ctx.fillStyle = '#DCE4F0'; ctx.fill();
+      const pr = p.calibDone ? 1 : (seen ? p.calibProg : 0);
+      if (pr > 0) { ctx.beginPath(); ctx.roundRect(cx - bw / 2, cy + 4, Math.max(12, bw * pr), 12, 6); ctx.fillStyle = '#2E8B57'; ctx.fill(); }
+    }
+  } else if (G.phase === 'count') {
     const left = 3 - (now - G.t0) / 1000; const n = Math.max(1, Math.ceil(left));
     ctx.fillStyle = 'rgba(20,28,51,0.45)'; ctx.fillRect(0, 0, W, H);
     ctx.save(); ctx.lineWidth = 14; ctx.strokeStyle = '#FFFFFF'; ctx.font = '220px Jua, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -818,7 +905,7 @@ function render(now) {
     ctx.translate(W / 2, H / 2 - 40); ctx.scale(sc, sc);
     ctx.strokeText(String(n), 0, 0); ctx.fillStyle = '#D63A3A'; ctx.fillText(String(n), 0, 0); ctx.restore();
     text(ctx, '똑바로 서서 준비!', W / 2, H / 2 + 100, 40, '#FFFFFF', 'center');
-    text(ctx, '점프 = 굴뚝   ·   앉기 = 눈덩이   ·   만세 = 큰 선물', W / 2, H / 2 + 156, 30, '#F8E9A8', 'center');
+    text(ctx, '점프 = 굴뚝   ·   앉기 = 눈덩이   ·   두 손 들고 점프 = 큰 선물', W / 2, H / 2 + 156, 30, '#F8E9A8', 'center');
   } else if (G.phase === 'otintro') {
     ctx.fillStyle = 'rgba(20,28,51,0.45)'; ctx.fillRect(0, 0, W, H);
     ctx.save(); ctx.lineWidth = 12; ctx.strokeStyle = '#FFFFFF'; ctx.font = '110px Jua, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -838,15 +925,29 @@ function render(now) {
 
 function drawPreview() {
   if (!cam.ready || video.readyState < 2) return;
-  const w = 192, h = 108, x = W - 40 - w, y = H - 52 - h - 8;
+  const w = 256, h = 144, x = W - 40 - w, y = H - 52 - h - 8;
   ctx.save();
   ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.clip();
   ctx.translate(x + w, y); ctx.scale(-1, 1); ctx.drawImage(video, 0, 0, w, h);
   ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.clip();
+  // 아이별 기준선(흰색) · 점프선(초록) · 앉기선(주황)
+  const th = SENS[sensSel.value] || SENS.normal;
+  for (const p of G.players) {
+    const x0 = G.battle ? x + p.idx * w / 2 : x, x1 = G.battle ? x0 + w / 2 : x + w;
+    if (p.base !== null && p.vh) {
+      const line = (py, col, dash) => { const yy = y + py / p.vh * h; ctx.setLineDash(dash); ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(x0 + 4, yy); ctx.lineTo(x1 - 4, yy); ctx.stroke(); };
+      line(p.base, '#FFFFFF', []);
+      line(p.base - th.j * p.sc, '#7CE08A', [6, 4]);
+      line(p.base + th.c * p.sc, '#FFB347', [6, 4]);
+      ctx.setLineDash([]);
+    }
+    if (p.lastNy != null && performance.now() - p.faceAt < 500) circle(ctx, x + p.lastX * w, y + p.lastNy / p.vh * h, 6, p.handsPrev ? '#F5C542' : '#D63A3A');
+  }
+  ctx.restore();
   ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.lineWidth = 3; ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
   if (G.battle) { ctx.setLineDash([6, 5]); ctx.beginPath(); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.stroke(); }
   ctx.restore();
-  for (const p of cam.poses) circle(ctx, x + p.x * w, y + h * 0.5, 7, p.hands ? '#F5C542' : '#D63A3A');
 }
 
 /* ================== 화면 이동 ================== */
