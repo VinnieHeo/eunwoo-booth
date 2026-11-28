@@ -27,9 +27,15 @@ button{font:inherit;cursor:pointer}
 .dot.p{background:var(--pink)}.dot.b{background:var(--sky)}.dot.used{opacity:.35}
 .tot{font-size:20px;margin-left:6px}
 #menuBtn{border:0;border-radius:14px;padding:10px 14px;background:#fff;color:var(--ink);font-size:16px;box-shadow:0 4px 0 rgba(0,0,0,.18);min-height:44px}
-#msg{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-size:clamp(34px,8vw,72px);color:#fff;-webkit-text-stroke:2px var(--ink);text-shadow:0 6px 0 var(--pink);white-space:nowrap;pointer-events:none;transition:transform .35s cubic-bezier(.3,1.6,.5,1),opacity .25s}
-#msg.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
-#hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:92vw;text-align:center;font-size:clamp(17px,2.6vw,24px);pointer-events:none}
+.msg{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%) scale(.6);opacity:0;font-size:clamp(40px,9vw,88px);color:#fff;-webkit-text-stroke:2px var(--ink);text-shadow:0 6px 0 var(--pink);white-space:nowrap;transition:transform .35s cubic-bezier(.3,1.6,.5,1),opacity .25s}
+.msg.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#lanesUI{position:fixed;inset:0;pointer-events:none}.laneui{position:absolute;top:0;bottom:0}
+.split .laneui+.laneui{border-left:5px solid #fff}
+.hint{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);width:max-content;max-width:92%;text-align:center;font-size:clamp(26px,3.8vw,44px);line-height:1.25;background:#FAC775;color:#26215C;border:4px solid #fff;border-radius:22px;padding:10px 22px;box-shadow:0 5px 0 rgba(0,0,0,.25)}
+.hint:empty{display:none}
+.split .msg{font-size:clamp(30px,5.5vw,64px)}.split .hint{font-size:clamp(20px,2.8vw,34px);max-width:80%}
+.split #camBox{left:50%;transform:translateX(-50%);bottom:12px}
+.pn.p{color:#d63a7f}.pn.b{color:#1f8fe0}
 #camBox{position:fixed;left:10px;bottom:70px;width:160px;border-radius:14px;overflow:hidden;border:4px solid #fff;background:#000;box-shadow:0 4px 0 rgba(0,0,0,.2)}
 #camBox video{width:100%;display:block;transform:scaleX(-1)}
 #camSt{background:#fff;font-size:14px;padding:4px 6px;text-align:center;line-height:1.3}#camSt.ok{background:#5ee08a}
@@ -69,14 +75,13 @@ button{font:inherit;cursor:pointer}
 #board{flex-direction:column;align-items:stretch}
 @media(max-width:600px){.cards.three{grid-template-columns:repeat(3,minmax(0,1fr))}.ngrid.two{grid-template-columns:minmax(0,1fr)}.cgrid{grid-template-columns:repeat(5,52px)}.pn{font-size:15px}}
 @media(max-width:600px){.cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.card svg{width:84px;height:84px}.card b{font-size:24px}.fr{width:36px}.fr b{font-size:15px}#camBox{width:110px}#gname{display:none}}
-@media(prefers-reduced-motion:reduce){#msg{transition:none}}
+@media(prefers-reduced-motion:reduce){.msg{transition:none}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head><body>
 <div id="stage"></div>
 <header id="hud" hidden><div class="pill" id="gname">볼링</div><div class="pill" id="board"></div><button id="menuBtn">처음으로</button></header>
-<div id="msg"></div>
-<div id="hint" class="pill" hidden></div>
+<div id="lanesUI"></div>
 <div id="camBox" hidden><video id="vid" playsinline muted></video><div id="camSt">카메라 준비 중…</div></div>
 
 <section id="menu" class="screen">
@@ -95,7 +100,7 @@ button{font:inherit;cursor:pointer}
   <p>어떻게 할까요?</p>
   <div class="cards three">
     <button class="card m solo" data-m="solo"><b>혼자서</b><span>5번 도전하기</span></button>
-    <button class="card m duo" data-m="duo"><b>둘이서</b><span>3번씩 대결하기</span></button>
+    <button class="card m duo" data-m="duo"><b>둘이서</b><span>나란히 서서 동시에</span></button>
     <button class="card m tour" data-m="tour"><b>토너먼트</b><span>우승자 뽑기</span></button>
   </div>
   <button class="big alt" data-home>뒤로</button>
@@ -140,7 +145,7 @@ function resize(){R.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerH
 addEventListener('resize',resize);resize();
 
 let scene=null,W={},S={phase:'menu'},gen=0;
-const camPos=new THREE.Vector3(0,2,4),camLook=new THREE.Vector3(0,0,-10),lookCur=new THREE.Vector3(0,0,-10);
+let camPos=new THREE.Vector3(0,2,4),camLook=new THREE.Vector3(0,0,-10),lookCur=new THREE.Vector3(0,0,-10);
 const later=(fn,ms)=>{const g=gen;setTimeout(()=>{if(g===gen)fn()},ms)};
 const std=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.5},o));
 function box(w,h,d,mat,x,y,z){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=m.receiveShadow=true;scene.add(m);return m}
@@ -201,8 +206,8 @@ function stepBowl(dt){const b=W.ball,live=W.pins.filter(p=>!p.gone);
     if(p.fallen&&p.tilt<1)p.tilt=Math.min(1,p.tilt+dt*3.2)})}
 function drawBowl(){const b=W.ball;b.m.position.set(b.x,b.gutter?BALL_R-.06:BALL_R,b.z);
   W.pins.forEach(p=>{p.g.visible=!p.gone;p.g.position.set(p.x,p.tilt*.09,p.z);p.g.quaternion.setFromAxisAngle(new THREE.Vector3(p.fz,0,-p.fx).normalize(),p.tilt*Math.PI/2*.97)})}
-function endBowl(){S.phase='wait';const k=W.pins.filter(p=>p.fallen).length;S.players[S.cur].sc.push(k);
-  say(k===10?'스트라이크!':k?`${k}개 쓰러졌어요!`:'아깝다!',k===10);nextTurn()}
+function endBowl(){S.phase='wait';const k=W.pins.filter(p=>p.fallen).length;M.players[cur.i].sc.push(k);
+  say(k===10?'스트라이크!':k?`${k}개 쓰러졌어요!`:'아깝다!',k===10);laneDone()}
 
 /* ---------- 컬링 ---------- */
 const HZ=-20,ST_R=.29,HOG=-14,BACK=-22.3,SIDE=2.2;
@@ -231,40 +236,51 @@ function stepCurl(dt){const st=W.stones.filter(s=>!s.out);
   const c=W.cur;W.brooms.visible=S.sweep&&c&&!c.out&&Math.hypot(c.vx,c.vz)>.05;if(W.brooms.visible){W.brooms.position.set(c.x+Math.sin(performance.now()/60)*.12,0,c.z-.6)}}
 function pts(s){if(s.out)return 0;const d=Math.hypot(s.x,s.z-HZ);return d<=.6?3:d<=1.2?2:d<=1.8+ST_R?1:0}
 
-function endCurl(){S.phase='wait';const s=W.cur;S.players[S.cur].sc.push(1);
-  if(s.out)say('밖으로 나갔어요!');else{const p=pts(s);say(p===3?'한가운데! 3점':p?`${p}점 자리!`:'잘했어요!',p===3)}nextTurn()}
+function endCurl(){S.phase='wait';const s=W.cur;M.players[cur.i].sc.push(1);
+  if(s.out)say('밖으로 나갔어요!');else{const p=pts(s);say(p===3?'한가운데! 3점':p?`${p}점 자리!`:'잘했어요!',p===3)}laneDone()}
 
 /* ---------- 공통 진행 ---------- */
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
-function total(i){return S.game==='bowl'?S.players[i].sc.reduce((a,v)=>a+v,0):W.stones.reduce((a,s)=>a+(s.owner===i?pts(s):0),0)}
-function curName(){return S.players[S.cur].name}
-function begin(){S.posX=0;S.seen=0;S.phase='ready';W.arrow.visible=false;board()}
-function readyHint(){const multi=S.players.length>1,who=multi?curName()+' 차례! ':'';
-  if(!camOn)return who+(camBusy?'카메라 준비 중… (화면을 톡 눌러도 시작돼요)':'화면을 톡 누르면 시작해요');return who+(P.found?'양손을 번쩍 들면 시작해요!':'카메라 앞에 서 주세요')}
-function countdown(){if(S.phase!=='ready')return;S.phase='count';
-  if(S.k===0){say('게임을 시작합니다!');hint('준비~');['3','2','1'].forEach((n,i)=>later(()=>say(n),1600+i*900));later(startAim,1600+3*900)}
-  else{say(S.players.length>1?curName()+' 차례!':'준비!');hint('준비~');later(startAim,1500)}}
-function nextTurn(){S.k++;board();const np=S.players.length;
-  if(S.k>=S.limit){const a=total(0),b=np>1?total(1):0;
-    if(np>1&&a===b&&S.ot<5){S.ot++;S.limit+=2;S.cur=S.k%np;later(()=>{say('동점! 연장전!',1);later(()=>{prep();begin()},1600)},1800);return}
-    return later(finish,2000)}
-  S.cur=S.k%np;later(()=>{prep();begin()},2000)}
+let lanes=[],cur=null,M=null;
+function use(l){cur=l;S=l.S;W=l.W;scene=l.scene;camPos=l.camPos;camLook=l.camLook;lookCur=l.lookCur}
+function laterL(l,fn,ms){later(()=>{if(!lanes.includes(l))return;use(l);fn()},ms)}
+function total(i){if(M.game==='bowl')return M.players[i].sc.reduce((a,v)=>a+v,0);const l=lanes[i];return l?l.W.stones.reduce((a,s)=>a+pts(s),0):0}
+function makeLane(i,n){(M.game==='bowl'?buildBowl:buildCurl)();
+  const l={i,scene,W,cam:new THREE.PerspectiveCamera(55,1,.1,200),camPos:new THREE.Vector3(0,1.5,3),camLook:new THREE.Vector3(0,.2,-9),lookCur:new THREE.Vector3(0,.2,-9),
+    P:{found:false,x:.5,handUp:false,bothUp:false,lean:0},S:{game:M.game,phase:'ready',k:0,limit:M.per,aim:0,aimT:Math.random()*3,posX:0,since:0,armed:false,sweep:false,rollT:0}};
+  l.cam.position.copy(l.camPos);l.cam.lookAt(l.lookCur);
+  const ui=document.createElement('div');ui.className='laneui';ui.style.left=(i*100/n)+'%';ui.style.width=(100/n)+'%';ui.innerHTML='<div class="msg"></div><div class="hint"></div>';$('lanesUI').appendChild(ui);l.msg=ui.firstChild;l.hint=ui.lastChild;return l}
+function readyCheck(dt){const all=camOn&&lanes.every(l=>l.P.found&&l.P.bothUp);M.seen=all?(M.seen||0)+dt:0;
+  lanes.forEach((l,i)=>{const P=l.P,who=M.split?M.players[i].name+', ':'';
+    l.hint.textContent=!camOn?(camBusy?'카메라 준비 중… (톡 눌러도 시작)':'화면을 톡 누르면 시작해요'):!P.found?(M.split?(i?'오른쪽':'왼쪽')+'에 서 주세요':'카메라 앞에 서 주세요'):(M.split&&P.bothUp)?'친구를 기다려요':who+'양손을 번쩍 들면 시작!'});
+  if(M.seen>.5)countdown()}
+function sayAll(t){lanes.forEach(l=>say(t,0,l,1))}
+function countdown(){if(M.started)return;M.started=true;lanes.forEach(l=>{l.S.phase='count';l.hint.textContent='준비~'});
+  sayAll('게임을 시작합니다!');tones([[660,0,.2]]);
+  ['3','2','1'].forEach((n,i)=>later(()=>{sayAll(n);tones([[523,0,.3]])},2000+i*1300));
+  later(()=>{sayAll('출발!');tones([[1047,0,.4]]);lanes.forEach(l=>{use(l);startAim()})},2000+3*1300)}
+function laneDone(){const l=cur;S.k++;board();
+  if(S.k<S.limit){laterL(l,()=>{say(M.game==='bowl'?'다음 공!':'다음 스톤!');hint('준비~');laterL(l,()=>{prep();startAim()},1200)},2000);return}
+  S.phase='done';laterL(l,()=>hint(M.split?'다 했어요! 친구를 기다려요':'끝!'),1800);
+  if(lanes.every(x=>x.S.phase==='done'))later(matchEnd,2400)}
+function matchEnd(){if(!M||M.ended)return;
+  if(M.split&&total(0)===total(1)&&M.ot<5){M.ot++;lanes.forEach(l=>{use(l);S.limit++;S.phase='wait';say('동점! 연장전!',1);hint('한 번 더!');laterL(l,()=>{prep();startAim()},2200)});board();return}
+  M.ended=true;finish()}
 function prep(){if(S.game==='bowl'){resetPins();resetBall()}}
 function startAim(){S.phase='aim';S.aimT=Math.random()*3;S.since=0;W.arrow.visible=true;
   const g=S.game==='bowl';W.arrow.position.set(0,0,g?-.2:-.4);
-  S.armed=false;hint(camOn?'옆으로 걸어서 자리 잡고, 몸을 기울여 방향! 손 번쩍 출발!':'화살표가 가운데를 보면 화면을 톡!');board()}
-function tap(){audio();if(S.phase==='ready')countdown();else if(S.phase==='aim')throwIt()}
+  S.armed=false;hint(camOn?(M.split?'몸을 기울여 방향! 손 번쩍 출발!':'옆으로 걸어 자리 잡고, 몸을 기울여 방향! 손 번쩍 출발!'):'화살표가 가운데를 보면 화면을 톡!')}
+function tap(e,li){audio();if(!M||M.ended)return;if(!M.started)return countdown();const l=lanes[li!=null?li:(lanes.length>1&&e&&e.clientX>innerWidth/2?1:0)];if(!l)return;use(l);if(S.phase==='aim')throwIt()}
 function throwIt(){S.phase='roll';S.rollT=0;W.arrow.visible=false;
   if(S.game==='bowl'){const a=S.aim*.075,v=BALL_V,b=W.ball;b.x=S.posX;const a2=a+(Math.random()-.5)*2*BP.noise;b.vx=Math.sin(a2)*v;b.vz=-Math.cos(a2)*v;b.active=true;noise(1.6,260,.45);hint('데굴데굴~')}
-  else{const a=S.aim*.07,v=4.7+(Math.random()-.5)*.25,s=makeStone(S.players.length>1?S.cur:0);s.x=S.posX;s.vx=Math.sin(a)*v;s.vz=-Math.cos(a)*v;W.stones.push(s);W.cur=s;noise(1,500,.25);
+  else{const a=S.aim*.07,v=4.7+(Math.random()-.5)*.25,s=makeStone(cur.i);s.x=S.posX;s.vx=Math.sin(a)*v;s.vz=-Math.cos(a)*v;W.stones.push(s);W.cur=s;noise(1,500,.25);
     hint('쓰~윽')}}
-function update(dt){S.since=(S.since||0)+dt;
+function update(dt){S.since=(S.since||0)+dt;const P=cur.P;
   if(S.phase==='aim'){if(camOn){if(P.found){const k=Math.min(1,dt*2.5),bw=S.game==='bowl',lim=bw?.8:1.2;
-        const px=Math.max(-lim,Math.min(lim,(P.x-.5)*(bw?2.6:3.6)));S.posX+=(px-S.posX)*k;
+        const px=M.split?0:Math.max(-lim,Math.min(lim,(P.x-.5)*(bw?2.6:3.6)));S.posX+=(px-S.posX)*k;
         const ln=Math.abs(P.lean)<.08?0:Math.max(-1,Math.min(1,P.lean/.35));S.aim+=(ln-S.aim)*k;
         if(!P.handUp)S.armed=true;if(S.armed&&P.handUp&&S.since>1)throwIt()}}
     else{S.aimT+=dt;S.aim=Math.sin(S.aimT*1.1)}W.arrow.rotation.y=-S.aim*(S.game==='bowl'?.075:.07)*4;W.arrow.position.x=S.posX;if(S.game==='bowl'){W.ball.x=S.posX}}
-  if(S.phase==='ready'){const f=camOn&&P.found;S.seen=f&&P.bothUp?S.seen+dt:0;hint(readyHint());if(S.seen>.5)countdown()}
   if(S.game==='bowl'){if(S.phase==='roll'){for(let i=0;i<4;i++)stepBowl(dt/4);S.rollT+=dt;
       const moving=W.pins.some(p=>!p.gone&&(Math.hypot(p.vx,p.vz)>.05||(p.fallen&&p.tilt<1)));if((!W.ball.active&&!moving&&S.rollT>1)||S.rollT>7)endBowl()}
     drawBowl();const b=W.ball;
@@ -275,19 +291,18 @@ function update(dt){S.since=(S.since||0)+dt;
     const p=W.flakes.geometry.attributes.position;for(let i=1;i<p.array.length;i+=3){p.array[i]-=dt*.6;if(p.array[i]<0)p.array[i]=8}p.needsUpdate=true;
     const c=W.cur;if(S.phase==='roll'&&c&&!c.out&&c.z>-15){camPos.set(0,1.9,c.z+4);camLook.set(0,0,c.z-8)}
     else if(S.phase==='roll'||S.phase==='wait'){camPos.set(0,6,-14.2);camLook.set(0,0,-20.2)}else{camPos.set(0,1.7,3.4);camLook.set(0,0,-10)}}
-  const k=1-Math.pow(.03,dt);cam.position.lerp(camPos,k);lookCur.lerp(camLook,k);cam.lookAt(lookCur)}
-function board(){const g=S.game,np=S.players.length,slots=S.limit/np;
-  $('board').innerHTML=S.players.map((pl,i)=>{let cells='';
-    for(let j=0;j<slots;j++){const v=pl.sc[j];cells+=g==='bowl'?`<div class="fr"><small>${j+1}</small><b>${v==null?'':v===10?'★':v}</b></div>`:`<span class="dot ${(np>1?i:0)?'b':'p'} ${v!=null?'used':''}"></span>`}
-    return `<div class="prow ${i===S.cur&&np>1?'on':''}">${np>1?`<span class="pn">${esc(pl.name)}</span>`:''}${cells}<span class="tot">${total(i)}${g==='bowl'?'개':'점'}</span></div>`}).join('')}
+  const k=1-Math.pow(.03,dt);cur.cam.position.lerp(camPos,k);lookCur.lerp(camLook,k);cur.cam.lookAt(lookCur)}
+function board(){if(!M)return;const g=M.game,np=M.players.length;
+  $('board').innerHTML=M.players.map((pl,i)=>{const l=lanes[i],slots=l?l.S.limit:M.per;let cells='';
+    for(let j=0;j<slots;j++){const v=pl.sc[j];cells+=g==='bowl'?`<div class="fr"><small>${j+1}</small><b>${v==null?'':v===10?'★':v}</b></div>`:`<span class="dot ${i?'b':'p'} ${v!=null?'used':''}"></span>`}
+    return `<div class="prow">${np>1?`<span class="pn ${i?'b':'p'}">${esc(pl.name)}</span>`:''}${cells}<span class="tot">${total(i)}${g==='bowl'?'개':'점'}</span></div>`}).join('')}
 function btn(t,fn,alt){const b=document.createElement('button');b.className='big'+(alt?' alt':'');b.textContent=t;b.onclick=fn;return b}
-function finish(){S.phase='end';$('hud').hidden=$('hint').hidden=true;$('camBox').hidden=true;cheer();
-  const g=S.game,u=g==='bowl'?'개':'점',ps=S.players,eb=$('endBtns');eb.innerHTML='';$('trophy').hidden=true;$('endSub').textContent='';
-  if(ps.length===1){const t=total(0);$('endTitle').textContent=g==='bowl'?(t>=40?'볼링 왕!':'잘했어요!'):(t>=9?'컬링 왕!':'잘했어요!');
+function finish(){const g=M.game,u=g==='bowl'?'개':'점',ps=M.players,tt=ps.map((_,i)=>total(i));clearGame();cheer();const eb=$('endBtns');eb.innerHTML='';$('trophy').hidden=true;$('endSub').textContent='';
+  if(ps.length===1){const t=tt[0];$('endTitle').textContent=g==='bowl'?(t>=40?'볼링 왕!':'잘했어요!'):(t>=9?'컬링 왕!':'잘했어요!');
     $('endScore').textContent=g==='bowl'?`${ps[0].name}, 핀을 ${t}개 쓰러뜨렸어요!`:`${ps[0].name}, ${t}점을 모았어요!`;
     eb.append(btn('한 번 더',()=>startMatch(ps.map(p=>p.name))),btn('처음으로',toMenu,1))}
-  else{const a=total(0),b=total(1);let w=a>b?0:b>a?1:(Math.random()<.5?0:1);
-    $('endScore').textContent=`${ps[0].name} ${a}${u} : ${b}${u} ${ps[1].name}`;if(S.ot)$('endSub').textContent=`연장전 ${S.ot}번 끝에 결정!`;
+  else{const a=tt[0],b=tt[1];let w=a>b?0:b>a?1:(Math.random()<.5?0:1);
+    $('endScore').textContent=`${ps[0].name} ${a}${u} : ${b}${u} ${ps[1].name}`;if(M.ot)$('endSub').textContent=`연장전 ${M.ot}번 끝에 결정!`;
     if(G.mode==='tour'){const m=T.cur,fin=T.rounds[m.r].length===2;T.rounds[m.r+1][m.j]=w?m.b:m.a;T.scores[m.r][m.j]=[a,b];T.played++;
       if(fin)T.champ={name:ps[w].name,runner:ps[1-w].name};
       $('endTitle').textContent=`${ps[w].name} ${fin?'우승!':'다음 판 진출!'}`;eb.append(btn(fin?'우승 화면 보기':'대진표 보기',fin?showChamp:showBracket))}
@@ -311,7 +326,7 @@ function makeBracket(names){const n=names.length;let P2=2;while(P2<n)P2*=2;const
   for(let j=0;j<m;j++)if(r0[2*j+1]===-1)T.rounds[1][j]=r0[2*j];showBracket()}
 function nextMatch(){for(let r=0;r<T.R;r++){const L=T.rounds[r].length;let num=0;for(let j=0;j<L/2;j++){const a=T.rounds[r][2*j],b=T.rounds[r][2*j+1];if(a===-1||b===-1)continue;num++;
   if(a!==null&&b!==null&&T.rounds[r+1][j]===null)return{r,j,a,b,label:L===2?'결승':`${L}강 ${num}경기`}}}return null}
-function showBracket(){gen++;scene=null;const nm=nextMatch();T.cur=nm;const area=$('brArea');area.innerHTML='';
+function showBracket(){clearGame();const nm=nextMatch();T.cur=nm;const area=$('brArea');area.innerHTML='';
   T.rounds.forEach((sl,r)=>{const col=document.createElement('div');col.className='col';const h=document.createElement('h3');h.textContent=r===T.R?'우승':sl.length===2?'결승':sl.length+'강';col.appendChild(h);
     if(r===T.R){const d=document.createElement('div');d.className='mt';d.textContent=sl[0]===null?'누구일까?':T.names[sl[0]];col.appendChild(d)}
     else for(let j=0;j<sl.length/2;j++){const d=document.createElement('div');d.className='mt'+(nm&&nm.r===r&&nm.j===j?' now':'');const nx=T.rounds[r+1][j],sc=T.scores[r][j];
@@ -321,23 +336,24 @@ function showBracket(){gen++;scene=null;const nm=nextMatch();T.cur=nm;const area
   $('brTitle').textContent=`${T.n}명 ${G.game==='bowl'?'볼링':'컬링'} 토너먼트`;$('brShuffle').hidden=T.played>0;
   if(nm){$('brSub').textContent=`다음 경기: ${nm.label} · ${T.names[nm.a]} vs ${T.names[nm.b]}`;$('brGo').textContent=`${nm.label} 시작!`}
   else{$('brSub').textContent='모든 경기가 끝났어요!';$('brGo').textContent='우승 화면 보기'}show('bracket')}
-function showChamp(){gen++;scene=null;$('hud').hidden=$('hint').hidden=$('camBox').hidden=true;$('trophy').hidden=false;cheer();
+function showChamp(){clearGame();$('trophy').hidden=false;cheer();
   $('endTitle').textContent='우승!';$('endScore').textContent=T.champ.name;$('endSub').textContent=`준우승: ${T.champ.runner} · ${T.n}명 모두 멋지게 했어요!`;
   const eb=$('endBtns');eb.innerHTML='';eb.append(btn('새 토너먼트',()=>show('count')),btn('처음으로',toMenu,1));show('end')}
-function startMatch(names){gen++;show(null);$('hud').hidden=$('hint').hidden=false;$('gname').textContent=G.game==='bowl'?'볼링':'컬링';
-  const np=names.length,per=np===1?5:3;S={game:G.game,players:names.map(n=>({name:n,sc:[]})),per,limit:per*np,k:0,cur:0,ot:0,aim:0,aimT:0,posX:0};
-  (G.game==='bowl'?buildBowl:buildCurl)();camPos.set(0,1.5,3);camLook.set(0,.2,-9);cam.position.copy(camPos);lookCur.copy(camLook);
-  if($('useCam').checked&&!camOn)startCam();$('camBox').hidden=!(camOn||camBusy);begin()}
-function toMenu(){gen++;S={phase:'menu'};scene=null;$('hud').hidden=$('hint').hidden=true;$('camBox').hidden=true;show('menu')}
-let msgT;function say(t,big){const m=$('msg');m.textContent=t;m.classList.add('on');clearTimeout(msgT);msgT=setTimeout(()=>m.classList.remove('on'),1500);if(big)cheer();else tones([[660,0,.15]])}
-function hint(t){$('hint').textContent=t}
+function clearGame(){gen++;lanes=[];cur=null;$('lanesUI').innerHTML='';$('hud').hidden=true;$('camBox').hidden=true;document.body.classList.remove('split');R.setScissorTest(false);R.clear()}
+function startMatch(names){clearGame();show(null);$('hud').hidden=false;$('gname').textContent=G.game==='bowl'?'볼링':'컬링';
+  const np=names.length;M={game:G.game,players:names.map(n=>({name:n,sc:[]})),per:np===1?5:3,ot:0,split:np>1,started:false,ended:false,seen:0};
+  document.body.classList.toggle('split',np>1);for(let i=0;i<np;i++)lanes.push(makeLane(i,np));use(lanes[0]);board();
+  if($('useCam').checked&&!camOn)startCam();$('camBox').hidden=!(camOn||camBusy)}
+function toMenu(){clearGame();M=null;show('menu')}
+function say(t,big,l=cur,quiet){if(!l)return;const m=l.msg;m.textContent=t;m.classList.add('on');clearTimeout(l.msgT);l.msgT=setTimeout(()=>m.classList.remove('on'),2000);if(quiet)return;if(big)cheer();else tones([[660,0,.15]])}
+function hint(t){if(cur)cur.hint.textContent=t}
 
 /* ---------- 입력 ---------- */
 let held=false;
-$('stage').addEventListener('pointerdown',e=>{held=true;if(scene)tap()});
+$('stage').addEventListener('pointerdown',e=>{held=true;if(lanes.length)tap(e)});
 addEventListener('pointerup',()=>held=false);addEventListener('pointercancel',()=>held=false);
-addEventListener('keydown',e=>{if(e.code==='Space'&&scene){e.preventDefault();if(!held){held=true;tap()}}});
-addEventListener('keyup',e=>{if(e.code==='Space')held=false});
+addEventListener('keydown',e=>{if(!lanes.length)return;if(e.code==='Space'||e.code==='Enter'){e.preventDefault();if(!held){held=true;tap(null,e.code==='Enter'&&lanes.length>1?1:0)}}});
+addEventListener('keyup',e=>{if(e.code==='Space'||e.code==='Enter')held=false});
 document.querySelectorAll('.card.bowl,.card.curl').forEach(c=>c.addEventListener('click',()=>{audio();pickGame(c.dataset.g)}));
 document.querySelectorAll('.card.m').forEach(c=>c.addEventListener('click',()=>{audio();pickMode(c.dataset.m)}));
 document.querySelectorAll('[data-home]').forEach(b=>b.onclick=toMenu);
@@ -348,9 +364,9 @@ $('brShuffle').onclick=()=>makeBracket(T.names);
 $('menuBtn').onclick=()=>G.mode==='tour'&&T?showBracket():toMenu();
 
 /* ---------- 카메라 · 사람 인식 (도토리 게임과 같은 방식) ---------- */
-let camOn=false,camBusy=false,lm=null,lastVT=-1;const vid=$('vid'),P={found:false,x:.5,handUp:false,bothUp:false,lean:0};
+let camOn=false,camBusy=false,lm=null,lastVT=-1;const vid=$('vid');
 function camSt(t,ok){const e=$('camSt');e.textContent=t;e.classList.toggle('ok',!!ok)}
-async function startCam(){if(camOn||camBusy)return;camBusy=true;$('camBox').hidden=!scene;camSt('카메라 준비 중…');
+async function startCam(){if(camOn||camBusy)return;camBusy=true;$('camBox').hidden=!lanes.length;camSt('카메라 준비 중…');
   try{const st=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});vid.srcObject=st;await vid.play();
     camSt('동작 인식 불러오는 중…');
     const V=await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
@@ -362,11 +378,12 @@ async function startCam(){if(camOn||camBusy)return;camBusy=true;$('camBox').hidd
   camBusy=false}
 $('useCam').addEventListener('change',e=>{if(e.target.checked)startCam()});
 function sense(){if(!camOn||vid.readyState<2||vid.currentTime===lastVT)return;lastVT=vid.currentTime;let res;try{res=lm.detectForVideo(vid,performance.now())}catch(e){return}
-  const ps=(res.landmarks||[]).map(l=>({l,w:Math.abs(l[11].x-l[12].x)})).sort((a,b)=>b.w-a.w);
-  if(!ps.length){P.found=false;camSt('카메라 앞에 서 주세요');return}
-  const l=ps[0].l,sx=(l[11].x+l[12].x)/2,nx=1-sx;P.x=P.found?P.x+(nx-P.x)*.3:nx;P.found=true;
-  const up=i=>l[i].visibility>.3&&l[i].y<l[0].y;P.handUp=up(15)||up(16);P.bothUp=up(15)&&up(16);const ln=(l[12].y-l[11].y)/(Math.abs(l[11].x-l[12].x)||.01);P.lean+=(ln-P.lean)*.3;
-  camSt(P.handUp?'손 번쩍!':'찾았어요!',true)}
+  const ps=(res.landmarks||[]).map(l=>({l,w:Math.abs(l[11].x-l[12].x),x:1-(l[11].x+l[12].x)/2}));
+  if(lanes.length===1){ps.sort((a,b)=>b.w-a.w);feed(lanes[0].P,ps[0])}
+  else{ps.sort((a,b)=>a.x-b.x);let A=null,B=null;if(ps.length>=2){A=ps[0];B=ps[ps.length-1]}else if(ps.length===1){if(ps[0].x<.5)A=ps[0];else B=ps[0]}feed(lanes[0].P,A);feed(lanes[1].P,B)}
+  const n=lanes.filter(l=>l.P.found).length;camSt(n?(lanes.length>1?`${n}명 찾았어요`:'찾았어요!'):'카메라 앞에 서 주세요',n>0)}
+function feed(P,p){if(!p){P.found=false;P.handUp=P.bothUp=false;return}const l=p.l;P.x=P.found?P.x+(p.x-P.x)*.3:p.x;P.found=true;
+  const up=i=>l[i].visibility>.3&&l[i].y<l[0].y;P.handUp=up(15)||up(16);P.bothUp=up(15)&&up(16);const ln=(l[12].y-l[11].y)/(p.w||.01);P.lean+=(ln-P.lean)*.3}
 
 /* ---------- 소리 ---------- */
 let AC=null;function audio(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==='suspended')AC.resume()}
@@ -377,9 +394,11 @@ function tones(l){if(!AC)return;const n=AC.currentTime;l.forEach(([f,t,d])=>{con
 function cheer(){tones([[523,0,.2],[659,.12,.2],[784,.24,.2],[1047,.36,.4]])}
 
 let last=performance.now();
-function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;if(!scene)return;sense();update(dt);R.render(scene,cam)}
+function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;if(!lanes.length||!M)return;sense();if(!M.started)readyCheck(dt);
+  const w=innerWidth,h=innerHeight,n=lanes.length,vw=w/n;R.setScissorTest(true);
+  lanes.forEach((l,i)=>{use(l);update(dt);R.setViewport(i*vw,0,vw,h);R.setScissor(i*vw,0,vw,h);l.cam.aspect=vw/h;l.cam.fov=l.cam.aspect<.9?68:55;l.cam.updateProjectionMatrix();R.render(l.scene,l.cam)})}
 requestAnimationFrame(loop);
-window.__T={G:()=>G,Tt:()=>T,pickGame,pickMode,startMatch,makeBracket,BP,sim:(x,a)=>{resetPins();resetBall();const b=W.ball,a2=a*.075+(Math.random()-.5)*2*BP.noise;b.x=x;b.vx=Math.sin(a2)*BALL_V;b.vz=-Math.cos(a2)*BALL_V;b.active=true;for(let i=0;i<2400;i++)stepBowl(1/240);return W.pins.filter(p=>p.fallen).length},tap,S:()=>S,W:()=>W,throwIt,cam:(x,h,l=0,both=false)=>{camOn=true;P.found=true;P.x=x;P.handUp=h;P.bothUp=both;P.lean=l}};
+window.__T={G:()=>G,Tt:()=>T,pickGame,pickMode,startMatch,makeBracket,BP,sim:(x,a)=>{resetPins();resetBall();const b=W.ball,a2=a*.075+(Math.random()-.5)*2*BP.noise;b.x=x;b.vx=Math.sin(a2)*BALL_V;b.vz=-Math.cos(a2)*BALL_V;b.active=true;for(let i=0;i<2400;i++)stepBowl(1/240);return W.pins.filter(p=>p.fallen).length},tap:li=>tap(null,li||0),S:(li=0)=>lanes[li]?lanes[li].S:{phase:'none'},M:()=>M,lanes:()=>lanes,W:()=>W,throwIt:(li=0)=>{use(lanes[li]);throwIt()},cam:(x,h,l=0,both=false,li=0)=>{camOn=true;const P=lanes[li].P;P.found=true;P.x=x;P.handUp=h;P.bothUp=both;P.lean=l}};
 }
 </script>
 </body></html>
