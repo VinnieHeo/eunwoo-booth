@@ -131,7 +131,7 @@ function buildBowl(){baseScene('#2a1850',45);
     [.47,.52].forEach(y=>{const t=new THREE.Mesh(new THREE.TorusGeometry(.053,.011,8,24),sm);t.rotation.x=Math.PI/2;t.position.y=y;g.add(t)});
     scene.add(g);W.pins.push({g,hx:x,hz:z,x,z,vx:0,vz:0,fallen:false,tilt:0,fx:0,fz:-1,gone:false})});
   S={game:'bowl',phase:'aim',turn:0,frames:Array(5).fill(null),aimT:0,aim:0};
-  resetPins();resetBall();startAim();}
+  resetPins();resetBall();begin();}
 function resetPins(){W.pins.forEach(p=>Object.assign(p,{x:p.hx,z:p.hz,vx:0,vz:0,fallen:false,tilt:0,gone:false}));W.pins.forEach(p=>p.g.visible=true)}
 function resetBall(){Object.assign(W.ball,{x:0,z:0,vx:0,vz:0,active:false,gutter:false});W.ball.m.visible=true;W.ball.m.position.set(0,BALL_R,0)}
 function topple(p,dx,dz){if(p.fallen)return;const s=Math.hypot(p.vx,p.vz);p.fallen=true;if(s>.05){p.fx=p.vx/s;p.fz=p.vz/s}else{const d=Math.hypot(dx,dz)||1;p.fx=dx/d;p.fz=dz/d}hitSound()}
@@ -168,7 +168,7 @@ function buildCurl(){baseScene('#cfe8ff',60);
   fl.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));W={flakes:new THREE.Points(fl,new THREE.PointsMaterial({color:'#fff',size:.07}))};scene.add(W.flakes);
   W.stones=[];W.arrow=makeArrow('#ff5fa2');W.cur=null;
   const brooms=new THREE.Group();[-1,1].forEach(s=>{const h=new THREE.Mesh(new THREE.BoxGeometry(.5,.05,.12),std('#ffd23f'));h.position.set(s*.25,.04,0);brooms.add(h)});brooms.visible=false;scene.add(brooms);W.brooms=brooms;
-  S={game:'curl',phase:'aim',idx:0,aimT:0,aim:0,sweep:false};startAim();}
+  S={game:'curl',phase:'aim',idx:0,aimT:0,aim:0,sweep:false};begin();}
 function makeStone(i){const g=new THREE.Group();const body=new THREE.Mesh(new THREE.CylinderGeometry(ST_R,ST_R*.92,.2,32),std('#9aa3b5',{roughness:.4}));body.position.y=.1;body.castShadow=true;g.add(body);
   const top=new THREE.Mesh(new THREE.CylinderGeometry(ST_R*.8,ST_R*.8,.03,32),std(i%2?'#3fb6ff':'#ff5fa2'));top.position.y=.21;g.add(top);
   const h=new THREE.Mesh(new THREE.BoxGeometry(.08,.08,.32),std(i%2?'#1f7fd0':'#d63a7f'));h.position.set(0,.27,.05);g.add(h);scene.add(g);
@@ -186,17 +186,24 @@ function endCurl(){S.phase='wait';S.sweep=false;const s=W.cur;
   S.idx++;board();if(S.idx>=5)return later(finish,2200);later(startAim,2000)}
 
 /* ---------- 공통 진행 ---------- */
+function begin(){S.posX=0;S.seen=0;if($('useCam').checked){S.phase='ready';W.arrow.visible=false;hint('카메라 앞에 서 주세요')}else startAim()}
+function countdown(){if(S.phase!=='ready')return;S.phase='count';say('게임을 시작합니다!');hint('준비~');
+  ['3','2','1'].forEach((n,i)=>later(()=>say(n),1600+i*900));later(startAim,1600+3*900)}
 function startAim(){S.phase='aim';S.aimT=Math.random()*3;S.since=0;W.arrow.visible=true;
   const g=S.game==='bowl';W.arrow.position.set(0,0,g?-.2:-.4);
-  S.armed=false;hint(camOn?'옆으로 움직여 조준하고, 손을 번쩍 들면 출발!':'화살표가 가운데를 보면 화면을 톡!');board()}
-function tap(){audio();if(S.phase==='aim')throwIt()}
+  S.armed=false;hint(camOn?'옆으로 걸어서 자리 잡고, 몸을 기울여 방향! 손 번쩍 출발!':'화살표가 가운데를 보면 화면을 톡!');board()}
+function tap(){audio();if(S.phase==='ready')countdown();else if(S.phase==='aim')throwIt()}
 function throwIt(){S.phase='roll';S.rollT=0;W.arrow.visible=false;
-  if(S.game==='bowl'){const a=S.aim*.055,v=9,b=W.ball;b.vx=Math.sin(a)*v;b.vz=-Math.cos(a)*v;b.active=true;noise(1.6,260,.45);hint('데굴데굴~')}
-  else{const a=S.aim*.07,v=4.7+(Math.random()-.5)*.25,s=makeStone(S.idx);s.vx=Math.sin(a)*v;s.vz=-Math.cos(a)*v;W.stones.push(s);W.cur=s;noise(1,500,.25);
+  if(S.game==='bowl'){const a=S.aim*.055,v=9,b=W.ball;b.x=S.posX;b.vx=Math.sin(a)*v;b.vz=-Math.cos(a)*v;b.active=true;noise(1.6,260,.45);hint('데굴데굴~')}
+  else{const a=S.aim*.07,v=4.7+(Math.random()-.5)*.25,s=makeStone(S.idx);s.x=S.posX;s.vx=Math.sin(a)*v;s.vz=-Math.cos(a)*v;W.stones.push(s);W.cur=s;noise(1,500,.25);
     hint('쓰~윽')}}
 function update(dt){S.since=(S.since||0)+dt;
-  if(S.phase==='aim'){if(camOn){if(P.found){const t=Math.max(-1,Math.min(1,(P.x-.5)*3));S.aim+=(t-S.aim)*Math.min(1,dt*8);if(!P.handUp)S.armed=true;if(S.armed&&P.handUp&&S.since>1)throwIt()}}
-    else{S.aimT+=dt;S.aim=Math.sin(S.aimT*1.1)}W.arrow.rotation.y=-S.aim*(S.game==='bowl'?.055:.07)*4;}
+  if(S.phase==='aim'){if(camOn){if(P.found){const k=Math.min(1,dt*6),bw=S.game==='bowl',lim=bw?.8:1.2;
+        const px=Math.max(-lim,Math.min(lim,(P.x-.5)*(bw?3.2:4.4)));S.posX+=(px-S.posX)*k;
+        const ln=Math.abs(P.lean)<.08?0:Math.max(-1,Math.min(1,P.lean/.35));S.aim+=(ln-S.aim)*k;
+        if(!P.handUp)S.armed=true;if(S.armed&&P.handUp&&S.since>1)throwIt()}}
+    else{S.aimT+=dt;S.aim=Math.sin(S.aimT*1.1)}W.arrow.rotation.y=-S.aim*(S.game==='bowl'?.055:.07)*4;W.arrow.position.x=S.posX;if(S.game==='bowl'){W.ball.x=S.posX}}
+  if(S.phase==='ready'){S.seen=camOn&&P.found?S.seen+dt:0;if(S.seen>1)countdown()}
   if(S.game==='bowl'){if(S.phase==='roll'){for(let i=0;i<4;i++)stepBowl(dt/4);S.rollT+=dt;
       const moving=W.pins.some(p=>!p.gone&&(Math.hypot(p.vx,p.vz)>.05||(p.fallen&&p.tilt<1)));if((!W.ball.active&&!moving&&S.rollT>1)||S.rollT>7)endBowl()}
     drawBowl();const b=W.ball;
@@ -232,7 +239,7 @@ document.querySelectorAll('.card').forEach(c=>c.addEventListener('click',()=>{au
 $('again').onclick=()=>start(S.game);$('toMenu').onclick=toMenu;$('menuBtn').onclick=toMenu;
 
 /* ---------- 카메라 · 사람 인식 (도토리 게임과 같은 방식) ---------- */
-let camOn=false,camBusy=false,lm=null,lastVT=-1;const vid=$('vid'),P={found:false,x:.5,handUp:false};
+let camOn=false,camBusy=false,lm=null,lastVT=-1;const vid=$('vid'),P={found:false,x:.5,handUp:false,lean:0};
 function camSt(t,ok){const e=$('camSt');e.textContent=t;e.classList.toggle('ok',!!ok)}
 async function startCam(){if(camOn||camBusy)return;camBusy=true;$('camBox').hidden=!scene;camSt('카메라 준비 중…');
   try{const st=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});vid.srcObject=st;await vid.play();
@@ -242,14 +249,14 @@ async function startCam(){if(camOn||camBusy)return;camBusy=true;$('camBox').hidd
     const o=d=>({baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',delegate:d},runningMode:'VIDEO',numPoses:2,minPoseDetectionConfidence:.5,minPosePresenceConfidence:.5,minTrackingConfidence:.5});
     try{lm=await V.PoseLandmarker.createFromOptions(files,o('GPU'))}catch(e){lm=await V.PoseLandmarker.createFromOptions(files,o('CPU'))}
     camOn=true;if(scene&&S.phase==='aim')startAim()}
-  catch(e){console.warn(e);camOn=false;$('useCam').checked=false;$('camBox').hidden=true;$('camNote').textContent='카메라를 쓸 수 없어서 화면 터치로 진행해요.';if(scene&&S.phase==='aim')startAim()}
+  catch(e){console.warn(e);camOn=false;$('useCam').checked=false;$('camBox').hidden=true;$('camNote').textContent='카메라를 쓸 수 없어서 화면 터치로 진행해요.';if(scene&&(S.phase==='aim'||S.phase==='ready'))startAim()}
   camBusy=false}
 $('useCam').addEventListener('change',e=>{if(e.target.checked)startCam()});
 function sense(){if(!camOn||vid.readyState<2||vid.currentTime===lastVT)return;lastVT=vid.currentTime;let res;try{res=lm.detectForVideo(vid,performance.now())}catch(e){return}
   const ps=(res.landmarks||[]).map(l=>({l,w:Math.abs(l[11].x-l[12].x)})).sort((a,b)=>b.w-a.w);
   if(!ps.length){P.found=false;camSt('카메라 앞에 서 주세요');return}
   const l=ps[0].l,sx=(l[11].x+l[12].x)/2;P.found=true;P.x=1-sx;
-  const up=i=>l[i].visibility>.3&&l[i].y<l[0].y;P.handUp=up(15)||up(16);
+  const up=i=>l[i].visibility>.3&&l[i].y<l[0].y;P.handUp=up(15)||up(16);P.lean=(l[12].y-l[11].y)/(Math.abs(l[11].x-l[12].x)||.01);
   camSt(P.handUp?'손 번쩍!':'찾았어요! 손을 번쩍!',true)}
 
 /* ---------- 소리 ---------- */
@@ -263,7 +270,7 @@ function cheer(){tones([[523,0,.2],[659,.12,.2],[784,.24,.2],[1047,.36,.4]])}
 let last=performance.now();
 function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;if(!scene)return;sense();update(dt);R.render(scene,cam)}
 requestAnimationFrame(loop);
-window.__T={start,tap,S:()=>S,W:()=>W,throwIt,cam:(x,h)=>{camOn=true;P.found=true;P.x=x;P.handUp=h}};
+window.__T={start,tap,S:()=>S,W:()=>W,throwIt,cam:(x,h,l=0)=>{camOn=true;P.found=true;P.x=x;P.handUp=h;P.lean=l}};
 }
 </script>
 </body></html>
