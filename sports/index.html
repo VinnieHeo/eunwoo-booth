@@ -103,24 +103,24 @@ function makeArrow(color){const s=new THREE.Shape();s.moveTo(-.07,0);s.lineTo(.0
   const grp=new THREE.Group();m.position.y=.02;m.rotation.x=0;grp.add(m);scene.add(grp);return grp}
 
 /* ---------- 볼링 ---------- */
-const PIN_Z=-18,SP=.3,BALL_R=.22,PIN_R=.12;
+const BALL_V=6,PIN_Z=-13,SP=.3,BALL_R=.22,PIN_R=.12,BP={M:3,bt:.35,pt:.35,pr:1.2,jit:.55,noise:.015};
 function buildBowl(){baseScene('#2a1850',45);
-  const lane=new THREE.Mesh(new THREE.PlaneGeometry(2.2,22.5),std('#fff',{roughness:.25,map:texCanvas(256,1024,g=>{
+  const lane=new THREE.Mesh(new THREE.PlaneGeometry(2.2,17.5),std('#fff',{roughness:.25,map:texCanvas(256,1024,g=>{
     for(let i=0;i<16;i++){g.fillStyle=i%2?'#eab97c':'#ddab6b';g.fillRect(i*16,0,16,1024)}
     g.fillStyle='rgba(110,55,20,.3)';for(let i=0;i<16;i++)g.fillRect(i*16,0,1,1024);
     g.fillStyle='#e0306f';for(let i=0;i<7;i++){const x=32+i*32,y=800-Math.abs(i-3)*26;g.beginPath();g.moveTo(x,y-24);g.lineTo(x-9,y);g.lineTo(x+9,y);g.fill()}
     for(let i=0;i<5;i++){g.beginPath();g.arc(64+i*32,930,5,0,7);g.fill()}})}));
-  lane.rotation.x=-Math.PI/2;lane.position.set(0,0,-9.75);lane.receiveShadow=true;scene.add(lane);
+  lane.rotation.x=-Math.PI/2;lane.position.set(0,0,-7.25);lane.receiveShadow=true;scene.add(lane);
   box(2.2,.02,3,std('#f4d3a1'),0,-.01,2.5);
   box(3.4,.02,1.2,std('#e0306f',{emissive:'#600'}),0,-.005,.6).scale.set(1,1,.02);
-  [-1,1].forEach(s=>{box(.25,.02,22.5,std('#3b3550',{roughness:.3}),s*1.25,-.04,-9.75);
-    const bump=box(.18,.3,22.5,std(s<0?'#ff5fa2':'#3fb6ff',{roughness:.35}),s*1.47,.15,-9.75);
+  [-1,1].forEach(s=>{box(.25,.02,17.5,std('#3b3550',{roughness:.3}),s*1.25,-.04,-7.25);
+    const bump=box(.18,.3,17.5,std(s<0?'#ff5fa2':'#3fb6ff',{roughness:.35}),s*1.47,.15,-7.25);
     box(4,.05,30,std('#3a2468'),s*3.5,-.06,-8);
-    for(let i=0;i<9;i++){const l=new THREE.Mesh(new THREE.SphereGeometry(.09,16,12),new THREE.MeshBasicMaterial({color:['#ffd23f','#ff5fa2','#5ee08a','#3fb6ff'][i%4]}));l.position.set(s*1.47,.36,1-i*2.5);scene.add(l)}});
-  box(3.4,.4,1.4,std('#160c2c'),0,-.2,-21.2);
+    for(let i=0;i<7;i++){const l=new THREE.Mesh(new THREE.SphereGeometry(.09,16,12),new THREE.MeshBasicMaterial({color:['#ffd23f','#ff5fa2','#5ee08a','#3fb6ff'][i%4]}));l.position.set(s*1.47,.36,1-i*2.5);scene.add(l)}});
+  box(3.4,.4,1.4,std('#160c2c'),0,-.2,-16.2);
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(6,1.5),new THREE.MeshBasicMaterial({map:texCanvas(1024,256,g=>{g.fillStyle='#1d1040';g.fillRect(0,0,1024,256);g.font='140px Jua, sans-serif';g.textAlign='center';g.textBaseline='middle';g.shadowColor='#ff5fa2';g.shadowBlur=30;g.fillStyle='#ffe3f0';g.fillText('꽃잎 볼링장',512,135)})}));
-  sign.position.set(0,2.6,-22.4);scene.add(sign);
-  box(10,5,.2,std('#24124a'),0,1.5,-22.6);
+  sign.position.set(0,2.6,-17.4);scene.add(sign);
+  box(10,5,.2,std('#24124a'),0,1.5,-17.6);
   const ball=new THREE.Mesh(new THREE.SphereGeometry(BALL_R,32,24),std('#ff4f98',{roughness:.18,metalness:.15,map:texCanvas(256,128,g=>{g.fillStyle='#ff4f98';g.fillRect(0,0,256,128);g.fillStyle='#ffd23f';for(let i=0;i<14;i++){const x=(i*53)%256,y=(i*37)%128;g.beginPath();for(let k=0;k<10;k++){const a=k*Math.PI/5,r=k%2?5:12;g.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r)}g.fill()}})}));
   ball.castShadow=true;scene.add(ball);
   W={ball:{m:ball,x:0,z:0,vx:0,vz:0,active:false,gutter:false},pins:[],arrow:makeArrow('#ffd23f')};
@@ -140,13 +140,14 @@ function collide(a,b,ra,rb,ma,mb,e){const dx=b.x-a.x,dz=b.z-a.z,d=Math.hypot(dx,
   const j=-(1+e)*rv/(1/ma+1/mb);a.vx-=j*nx/ma;a.vz-=j*nz/ma;b.vx+=j*nx/mb;b.vz+=j*nz/mb;return -rv}
 function stepBowl(dt){const b=W.ball,live=W.pins.filter(p=>!p.gone);
   if(b.active){b.x+=b.vx*dt;b.z+=b.vz*dt;b.m.rotation.x+=b.vz*dt/BALL_R;
-    if(!b.gutter&&b.z>-17&&Math.abs(b.x)>1.1-BALL_R*.3){b.gutter=true;b.x=Math.sign(b.x)*1.25;b.vx=0;say('도랑이에요!')}
-    if(Math.abs(b.x)>1.25){b.x=Math.sign(b.x)*1.25;b.vx=0}if(b.z<-20.6){b.active=false;b.m.visible=false}
-    if(!b.gutter)live.forEach(p=>{if(collide(b,p,BALL_R,PIN_R,6,1.5,.4)>.2)topple(p,p.x-b.x,p.z-b.z)})}
+    if(!b.gutter&&b.z>-12&&Math.abs(b.x)>1.1-BALL_R*.3){b.gutter=true;b.x=Math.sign(b.x)*1.25;b.vx=0;say('도랑이에요!')}
+    if(Math.abs(b.x)>1.25){b.x=Math.sign(b.x)*1.25;b.vx=0}if(b.z<-15.6){b.active=false;b.m.visible=false}
+    if(!b.gutter)live.forEach(p=>{if(collide(b,p,BALL_R,PIN_R,BP.M,1.5,.4)>BP.bt)topple(p,p.x-b.x,p.z-b.z)})}
   for(let i=0;i<live.length;i++)for(let j=i+1;j<live.length;j++){const p=live[i],q=live[j];const r=collide(p,q,PIN_R,PIN_R,1.5,1.5,.5);
-    if(r>.25){if(p.fallen&&!q.fallen)topple(q,q.x-p.x,q.z-p.z);else if(q.fallen&&!p.fallen)topple(p,p.x-q.x,p.z-q.z);else{topple(p,p.x-q.x,p.z-q.z);topple(q,q.x-p.x,q.z-p.z)}}}
+    if(r>.05&&BP.jit){[p,q].forEach(o=>{const t=(Math.random()-.5)*2*BP.jit,c=Math.cos(t),sn=Math.sin(t),vx=o.vx;o.vx=vx*c-o.vz*sn;o.vz=vx*sn+o.vz*c})}
+    if(r>BP.pt&&Math.random()<(r-BP.pt)/BP.pr){if(p.fallen&&!q.fallen)topple(q,q.x-p.x,q.z-p.z);else if(q.fallen&&!p.fallen)topple(p,p.x-q.x,p.z-q.z);else{topple(p,p.x-q.x,p.z-q.z);topple(q,q.x-p.x,q.z-p.z)}}}
   live.forEach(p=>{const s=Math.hypot(p.vx,p.vz);if(s>0){const n=Math.max(0,s-(p.fallen?2.2:3.5)*dt);p.vx*=n/s;p.vz*=n/s}
-    p.x+=p.vx*dt;p.z+=p.vz*dt;if(Math.abs(p.x)>1.15||p.z<-20.4){if(!p.fallen)topple(p,p.vx,p.vz);p.vx*=.5;p.vz*=.5}
+    p.x+=p.vx*dt;p.z+=p.vz*dt;if(Math.abs(p.x)>1.15||p.z<-15.4){if(!p.fallen)topple(p,p.vx,p.vz);p.vx*=.5;p.vz*=.5}
     if(p.fallen&&p.tilt<1)p.tilt=Math.min(1,p.tilt+dt*3.2)})}
 function drawBowl(){const b=W.ball;b.m.position.set(b.x,b.gutter?BALL_R-.06:BALL_R,b.z);
   W.pins.forEach(p=>{p.g.visible=!p.gone;p.g.position.set(p.x,p.tilt*.09,p.z);p.g.quaternion.setFromAxisAngle(new THREE.Vector3(p.fz,0,-p.fx).normalize(),p.tilt*Math.PI/2*.97)})}
@@ -194,21 +195,21 @@ function startAim(){S.phase='aim';S.aimT=Math.random()*3;S.since=0;W.arrow.visib
   S.armed=false;hint(camOn?'옆으로 걸어서 자리 잡고, 몸을 기울여 방향! 손 번쩍 출발!':'화살표가 가운데를 보면 화면을 톡!');board()}
 function tap(){audio();if(S.phase==='ready')countdown();else if(S.phase==='aim')throwIt()}
 function throwIt(){S.phase='roll';S.rollT=0;W.arrow.visible=false;
-  if(S.game==='bowl'){const a=S.aim*.055,v=9,b=W.ball;b.x=S.posX;b.vx=Math.sin(a)*v;b.vz=-Math.cos(a)*v;b.active=true;noise(1.6,260,.45);hint('데굴데굴~')}
+  if(S.game==='bowl'){const a=S.aim*.075,v=BALL_V,b=W.ball;b.x=S.posX;const a2=a+(Math.random()-.5)*2*BP.noise;b.vx=Math.sin(a2)*v;b.vz=-Math.cos(a2)*v;b.active=true;noise(1.6,260,.45);hint('데굴데굴~')}
   else{const a=S.aim*.07,v=4.7+(Math.random()-.5)*.25,s=makeStone(S.idx);s.x=S.posX;s.vx=Math.sin(a)*v;s.vz=-Math.cos(a)*v;W.stones.push(s);W.cur=s;noise(1,500,.25);
     hint('쓰~윽')}}
 function update(dt){S.since=(S.since||0)+dt;
-  if(S.phase==='aim'){if(camOn){if(P.found){const k=Math.min(1,dt*6),bw=S.game==='bowl',lim=bw?.8:1.2;
-        const px=Math.max(-lim,Math.min(lim,(P.x-.5)*(bw?3.2:4.4)));S.posX+=(px-S.posX)*k;
+  if(S.phase==='aim'){if(camOn){if(P.found){const k=Math.min(1,dt*2.5),bw=S.game==='bowl',lim=bw?.8:1.2;
+        const px=Math.max(-lim,Math.min(lim,(P.x-.5)*(bw?2.6:3.6)));S.posX+=(px-S.posX)*k;
         const ln=Math.abs(P.lean)<.08?0:Math.max(-1,Math.min(1,P.lean/.35));S.aim+=(ln-S.aim)*k;
         if(!P.handUp)S.armed=true;if(S.armed&&P.handUp&&S.since>1)throwIt()}}
-    else{S.aimT+=dt;S.aim=Math.sin(S.aimT*1.1)}W.arrow.rotation.y=-S.aim*(S.game==='bowl'?.055:.07)*4;W.arrow.position.x=S.posX;if(S.game==='bowl'){W.ball.x=S.posX}}
-  if(S.phase==='ready'){S.seen=camOn&&P.found?S.seen+dt:0;if(S.seen>1)countdown()}
+    else{S.aimT+=dt;S.aim=Math.sin(S.aimT*1.1)}W.arrow.rotation.y=-S.aim*(S.game==='bowl'?.075:.07)*4;W.arrow.position.x=S.posX;if(S.game==='bowl'){W.ball.x=S.posX}}
+  if(S.phase==='ready'){const f=camOn&&P.found;S.seen=f&&P.bothUp?S.seen+dt:0;hint(f?'양손을 번쩍 들면 시작해요!':'카메라 앞에 서 주세요');if(S.seen>.5)countdown()}
   if(S.game==='bowl'){if(S.phase==='roll'){for(let i=0;i<4;i++)stepBowl(dt/4);S.rollT+=dt;
       const moving=W.pins.some(p=>!p.gone&&(Math.hypot(p.vx,p.vz)>.05||(p.fallen&&p.tilt<1)));if((!W.ball.active&&!moving&&S.rollT>1)||S.rollT>7)endBowl()}
     drawBowl();const b=W.ball;
-    if(S.phase==='roll'&&b.active){camPos.set(0,1.25,Math.max(b.z+2.8,-14.3));camLook.set(0,.25,Math.min(b.z-8,-18.4))}
-    else if(S.phase==='roll'||S.phase==='wait'){camPos.set(0,1.15,-14.3);camLook.set(0,.25,-18.4)}else{camPos.set(0,1.45,2.9);camLook.set(0,.2,-12)}}
+    if(S.phase==='roll'&&b.active){camPos.set(0,1.25,Math.max(b.z+2.8,-9.3));camLook.set(0,.25,Math.min(b.z-8,-13.4))}
+    else if(S.phase==='roll'||S.phase==='wait'){camPos.set(0,1.15,-9.3);camLook.set(0,.25,-13.4)}else{camPos.set(0,1.45,2.9);camLook.set(0,.2,-9)}}
   else if(S.game==='curl'){S.sweep=false;
     if(S.phase==='roll'){for(let i=0;i<4;i++)stepCurl(dt/4);S.rollT+=dt;if(S.rollT>.5&&W.stones.every(s=>s.out||Math.hypot(s.vx,s.vz)<.01))endCurl()}else stepCurl(0);
     const p=W.flakes.geometry.attributes.position;for(let i=1;i<p.array.length;i+=3){p.array[i]-=dt*.6;if(p.array[i]<0)p.array[i]=8}p.needsUpdate=true;
@@ -239,7 +240,7 @@ document.querySelectorAll('.card').forEach(c=>c.addEventListener('click',()=>{au
 $('again').onclick=()=>start(S.game);$('toMenu').onclick=toMenu;$('menuBtn').onclick=toMenu;
 
 /* ---------- 카메라 · 사람 인식 (도토리 게임과 같은 방식) ---------- */
-let camOn=false,camBusy=false,lm=null,lastVT=-1;const vid=$('vid'),P={found:false,x:.5,handUp:false,lean:0};
+let camOn=false,camBusy=false,lm=null,lastVT=-1;const vid=$('vid'),P={found:false,x:.5,handUp:false,bothUp:false,lean:0};
 function camSt(t,ok){const e=$('camSt');e.textContent=t;e.classList.toggle('ok',!!ok)}
 async function startCam(){if(camOn||camBusy)return;camBusy=true;$('camBox').hidden=!scene;camSt('카메라 준비 중…');
   try{const st=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'},audio:false});vid.srcObject=st;await vid.play();
@@ -255,9 +256,9 @@ $('useCam').addEventListener('change',e=>{if(e.target.checked)startCam()});
 function sense(){if(!camOn||vid.readyState<2||vid.currentTime===lastVT)return;lastVT=vid.currentTime;let res;try{res=lm.detectForVideo(vid,performance.now())}catch(e){return}
   const ps=(res.landmarks||[]).map(l=>({l,w:Math.abs(l[11].x-l[12].x)})).sort((a,b)=>b.w-a.w);
   if(!ps.length){P.found=false;camSt('카메라 앞에 서 주세요');return}
-  const l=ps[0].l,sx=(l[11].x+l[12].x)/2;P.found=true;P.x=1-sx;
-  const up=i=>l[i].visibility>.3&&l[i].y<l[0].y;P.handUp=up(15)||up(16);P.lean=(l[12].y-l[11].y)/(Math.abs(l[11].x-l[12].x)||.01);
-  camSt(P.handUp?'손 번쩍!':'찾았어요! 손을 번쩍!',true)}
+  const l=ps[0].l,sx=(l[11].x+l[12].x)/2,nx=1-sx;P.x=P.found?P.x+(nx-P.x)*.3:nx;P.found=true;
+  const up=i=>l[i].visibility>.3&&l[i].y<l[0].y;P.handUp=up(15)||up(16);P.bothUp=up(15)&&up(16);const ln=(l[12].y-l[11].y)/(Math.abs(l[11].x-l[12].x)||.01);P.lean+=(ln-P.lean)*.3;
+  camSt(P.handUp?'손 번쩍!':'찾았어요!',true)}
 
 /* ---------- 소리 ---------- */
 let AC=null;function audio(){if(!AC){try{AC=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}}if(AC&&AC.state==='suspended')AC.resume()}
@@ -270,7 +271,7 @@ function cheer(){tones([[523,0,.2],[659,.12,.2],[784,.24,.2],[1047,.36,.4]])}
 let last=performance.now();
 function loop(t){requestAnimationFrame(loop);const dt=Math.min(.05,(t-last)/1000);last=t;if(!scene)return;sense();update(dt);R.render(scene,cam)}
 requestAnimationFrame(loop);
-window.__T={start,tap,S:()=>S,W:()=>W,throwIt,cam:(x,h,l=0)=>{camOn=true;P.found=true;P.x=x;P.handUp=h;P.lean=l}};
+window.__T={BP,sim:(x,a)=>{resetPins();resetBall();const b=W.ball,a2=a*.075+(Math.random()-.5)*2*BP.noise;b.x=x;b.vx=Math.sin(a2)*BALL_V;b.vz=-Math.cos(a2)*BALL_V;b.active=true;for(let i=0;i<2400;i++)stepBowl(1/240);return W.pins.filter(p=>p.fallen).length},start,tap,S:()=>S,W:()=>W,throwIt,cam:(x,h,l=0,both=false)=>{camOn=true;P.found=true;P.x=x;P.handUp=h;P.bothUp=both;P.lean=l}};
 }
 </script>
 </body></html>
